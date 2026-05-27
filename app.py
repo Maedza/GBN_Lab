@@ -30,6 +30,7 @@ from config import (
     COLOR_UNSENT, COLOR_SENT, COLOR_ACKED, COLOR_TIMEOUT,
     STATUS_IDLE, STATUS_RUNNING, STATUS_COMPLETE,
     SCENARIO_PRESETS, DEFAULT_SCENARIO,
+    MONO_FONT,
 )
 from simulation import GBNSimulation, EventType
 
@@ -360,7 +361,7 @@ class GBNLabApp(ctk.CTk):
                      text_color=COLOR_TEXT_MUTED).pack(side="left")
 
         self._log_text = tk.Text(log_frame, bg="#0f172a", fg=COLOR_TEXT,
-                                  font=("SF Mono", 11), wrap="word",
+                                  font=(MONO_FONT, 11), wrap="word",
                                   bd=0, padx=8, pady=4,
                                   insertbackground=COLOR_ACCENT,
                                   highlightthickness=0, state="disabled")
@@ -372,7 +373,7 @@ class GBNLabApp(ctk.CTk):
         self._log_text.tag_configure("warn", foreground=COLOR_WARNING)
         self._log_text.tag_configure("info", foreground=COLOR_ACCENT)
         self._log_text.tag_configure("ts", foreground=COLOR_TEXT_MUTED,
-                                      font=("SF Mono", 10))
+                                      font=(MONO_FONT, 10))
 
 
     def _build_metrics_panel(self, parent) -> None:
@@ -1310,17 +1311,17 @@ class GBNLabApp(ctk.CTk):
         if needs_static:
             self._canvas.create_text(margin_left, sender_y - 30,
                                      text="SENDER", anchor="w",
-                                     fill=COLOR_ACCENT, font=("SF Mono", 15, "bold"))
+                                     fill=COLOR_ACCENT, font=(MONO_FONT, 15, "bold"))
             self._canvas.create_text(margin_left, recv_y + shared_box + 24,
                                      text="RECEIVER", anchor="w",
-                                     fill=COLOR_SUCCESS, font=("SF Mono", 15, "bold"))
+                                     fill=COLOR_SUCCESS, font=(MONO_FONT, 15, "bold"))
 
             ch_color = "#4f46e5"
             ch_width = 2
             self._canvas.create_line(0, mid_y, w, mid_y, fill=ch_color,
                                      dash=(6, 4), width=ch_width)
             self._canvas.create_text(w // 2, mid_y - 12, text="CHANNEL",
-                                     fill=COLOR_TEXT_MUTED, font=("SF Mono", 10))
+                                     fill=COLOR_TEXT_MUTED, font=(MONO_FONT, 10))
 
         # === DYNAMIC ELEMENTS (redrawn every frame) ===
 
@@ -1346,7 +1347,7 @@ class GBNLabApp(ctk.CTk):
                 color = COLOR_UNSENT
 
             self._draw_neon_box(x, sender_y, shared_box, color,
-                                text=str(pkt), font=("SF Mono", shared_font, "bold"),
+                                text=str(pkt), font=(MONO_FONT, shared_font, "bold"),
                                 tags="dyn")
             sender_slot_x[pkt] = x + shared_box / 2
 
@@ -1385,7 +1386,7 @@ class GBNLabApp(ctk.CTk):
                 label += f"  [RESEND {rw[0]}..{rw[1]}]"
             self._canvas.create_text((left_x + right_x) / 2, sender_y - 20,
                                       text=label, fill=bracket_color,
-                                      font=("SF Mono", 9, "bold"), tags="dyn")
+                                      font=(MONO_FONT, 9, "bold"), tags="dyn")
 
         for pkt in range(base):
             x = margin_left + pkt * shared_slot
@@ -1400,7 +1401,7 @@ class GBNLabApp(ctk.CTk):
             self._canvas.create_text(
                 x + shared_box / 2, sender_y + shared_box / 2,
                 text=str(pkt), fill=COLOR_TEXT_MUTED,
-                font=("SF Mono", shared_font, "bold"),
+                font=(MONO_FONT, shared_font, "bold"),
                 tags="dyn",
             )
 
@@ -1423,7 +1424,7 @@ class GBNLabApp(ctk.CTk):
                 self._canvas.create_text(
                     x + shared_box / 2, recv_y + shared_box / 2,
                     text=str(pkt), fill=COLOR_TEXT_MUTED,
-                    font=("SF Mono", shared_font, "bold"),
+                    font=(MONO_FONT, shared_font, "bold"),
                     tags="dyn",
                 )
                 recv_slot_x[pkt] = x + shared_box / 2
@@ -1436,7 +1437,7 @@ class GBNLabApp(ctk.CTk):
                 color = COLOR_UNSENT
 
             self._draw_neon_box(x, recv_y, shared_box, color,
-                                text=str(pkt), font=("SF Mono", shared_font, "bold"),
+                                text=str(pkt), font=(MONO_FONT, shared_font, "bold"),
                                 tags="dyn")
             recv_slot_x[pkt] = x + shared_box / 2
 
@@ -1445,7 +1446,7 @@ class GBNLabApp(ctk.CTk):
             ex_x = recv_slot_x.get(expected, margin_left + expected * shared_slot + shared_box / 2)
             self._canvas.create_text(ex_x, recv_y - 14,
                                       text=f"Expected #{expected}", fill=COLOR_ACCENT,
-                                      font=("SF Mono", 9, "bold"), tags="dyn")
+                                      font=(MONO_FONT, 9, "bold"), tags="dyn")
 
         # FLYING PACKETS — X-interpolation from sender → receiver
 
@@ -1547,14 +1548,14 @@ class GBNLabApp(ctk.CTk):
                 if is_failure:
                     self._canvas.create_text(
                         x, y, text="✗",
-                        fill=COLOR_ERROR, font=("SF Mono", 12, "bold"),
+                        fill=COLOR_ERROR, font=(MONO_FONT, 12, "bold"),
                         tags="dyn"
                     )
                 else:
                     label = f"#{display_pkt}" if flight_id >= 0 else f"ACK{display_pkt}"
                     self._canvas.create_text(
                         x, y + dot_r + 8, text=label,
-                        fill=fill, font=("SF Mono", 7), tags="dyn"
+                        fill=fill, font=(MONO_FONT, 7), tags="dyn"
                     )
 
                 if is_failure and progress >= fail_point:
@@ -1589,7 +1590,7 @@ class GBNLabApp(ctk.CTk):
                                   text=f"Delivered: {delivered}/{total}  |  "
                                        f"Sent (unACKed): {sent_count}",
                                   anchor="w", fill=COLOR_TEXT_MUTED,
-                                  font=("SF Mono", 11), tags="dyn")
+                                  font=(MONO_FONT, 11), tags="dyn")
 
         if needs_static:
             lx = w - margin_right - 120
@@ -1603,7 +1604,7 @@ class GBNLabApp(ctk.CTk):
                 y = footer_y + i * 18
                 self._canvas.create_rectangle(lx, y, lx + 12, y + 12, fill=c, outline="")
                 self._canvas.create_text(lx + 18, y + 6, text=lbl, anchor="w",
-                                         fill=COLOR_TEXT_MUTED, font=("SF Mono", 10))
+                                         fill=COLOR_TEXT_MUTED, font=(MONO_FONT, 10))
 
     def _draw_neon_background(self, w: int, h: int) -> None:
         """Subtle radial glow effect for neon mode."""
@@ -1617,7 +1618,7 @@ class GBNLabApp(ctk.CTk):
 
     def _draw_neon_box(self, x: float, y: float, size: float, fill: str,
                         outline: str = "", text: str = "", text_color: str = "",
-                        font=("SF Mono", 9, "bold"), pulse: bool = False,
+                        font=(MONO_FONT, 9, "bold"), pulse: bool = False,
                         tags: str = "") -> None:
         """Draw a packet box with neon border."""
         self._canvas.create_rectangle(
@@ -1644,7 +1645,7 @@ class GBNLabApp(ctk.CTk):
         self._canvas_size = (0, 0)  # force full redraw on next snapshot
         self._canvas.create_text(w // 2, h // 2,
                                   text="Click 'Start Simulation'\nto begin",
-                                  fill=COLOR_TEXT_MUTED, font=("SF Mono", 14),
+                                  fill=COLOR_TEXT_MUTED, font=(MONO_FONT, 14),
                                   justify="center")
 
     # Cleanup

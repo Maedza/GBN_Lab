@@ -19,6 +19,8 @@ MAX_LOG_EVENTS = 80           # visible event log lines
 
 # ---- Animation ----
 ANIMATION_INTERVAL_MS = 80    # canvas redraw interval
+MONO_FONT = ("Consolas", "SF Mono", "Courier New", "TkFixedFont")
+# cross-platform monospace — picks first available on each OS
 PACKET_BOX_SIZE = 34          # size of each packet square on canvas
 PACKET_SPACING = 6            # gap between packet squares
 
