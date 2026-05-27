@@ -1120,7 +1120,14 @@ class GBNLabApp(ctk.CTk):
             self._log("warn", f"TIMEOUT #{pid} → RESEND WINDOW [{ws}..{we}] N={n_val} "
                                f"@ {t:.1f}ms")
         elif etype == "DONE":
+            d = meta.get("delivered", "?")
+            ts = meta.get("total_sent", "?")
+            eff_val = meta.get("efficiency", 0)
+            tp_val = meta.get("throughput", 0)
             self._log("info", "▼ SIMULATION COMPLETE ▼")
+            self._log("info", f"COMPLETE — {d}/{meta.get('n', '?')} delivered "
+                      f"({ts} sent incl. retransmissions), "
+                      f"efficiency={eff_val:.1f}%, throughput={tp_val:.1f} kbps")
         else:
             self._log("info", f"{etype} @ {t:.1f}ms")
 
@@ -1339,12 +1346,22 @@ class GBNLabApp(ctk.CTk):
         else:
             done_anim = self._anim_frame
 
+        last_time = metrics.get("duration_ms", 0)
         self._replay_events.append({
             "event_type": "DONE",
-            "event_time": self._last_snapshot.get("sim_time", 0),
+            "event_time": last_time,
             "event_packet_id": -1,
             "event_ack_id": -1,
-            "event_meta": {},
+            "event_meta": {
+                "delivered": metrics.get("delivered", 0),
+                "total_sent": metrics.get("total_sent", 0),
+                "efficiency": eff,
+                "throughput": tp,
+                "retransmissions": metrics.get("retransmissions", 0),
+                "timeouts": metrics.get("timeouts", 0),
+                "avg_delay_ms": metrics.get("avg_delay_ms", 0),
+                "n": n,
+            },
             "anim_frame": done_anim,
         })
 
