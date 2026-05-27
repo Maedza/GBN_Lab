@@ -964,7 +964,7 @@ class GBNLabApp(ctk.CTk):
         sent_count = len(sent)
         self._canvas.create_text(margin_left, recv_y + shared_box + 16,
                                   text=f"Delivered: {delivered}/{total}  |  "
-                                       f"Sent (unacked): {sent_count}",
+                                       f"Sent (unACKed): {sent_count}",
                                   anchor="w", fill=COLOR_TEXT_MUTED,
                                   font=("SF Mono", 11))
 

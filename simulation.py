@@ -647,7 +647,7 @@ class GBNSimulation:
         self.state.retransmitting_window = (win_start, win_end)
         self.state.retransmit_frame += 1
 
-        # Retransmit all unacked from base to next_seq-1
+        # Retransmit all unACKed from base to next_seq-1
         # 5 ms penalty for timeout + slot-counter for serialisation
         self._next_send_slot = max(self._next_send_slot, self._sim_time + 5.0)
         for pid in range(win_start, win_end + 1):
