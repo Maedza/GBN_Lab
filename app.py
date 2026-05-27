@@ -50,9 +50,9 @@ class MetricCard(ctk.CTkFrame):
 
     def __init__(self, parent, title: str, unit: str = "", **kw):
         super().__init__(parent, fg_color=COLOR_BG_HIGHLIGHT, corner_radius=8, **kw)
-        ctk.CTkLabel(self, text=title, font=ctk.CTkFont(size=10),
+        ctk.CTkLabel(self, text=title, font=ctk.CTkFont(size=11),
                      text_color=COLOR_TEXT_MUTED).pack(anchor="w", padx=12, pady=(8, 0))
-        self._value = ctk.CTkLabel(self, text="--", font=ctk.CTkFont(size=22, weight="bold"),
+        self._value = ctk.CTkLabel(self, text="--", font=ctk.CTkFont(size=24, weight="bold"),
                                     text_color=COLOR_ACCENT)
         self._value.pack(anchor="w", padx=12)
         if unit:
@@ -128,7 +128,7 @@ class GBNLabApp(ctk.CTk):
         self._status_dot.pack(side="right", padx=(0, 6), pady=10)
         self._dot = self._status_dot.create_oval(2, 2, 12, 12, fill="#475569", outline="")
 
-        self._status_label = ctk.CTkLabel(bar, text="Idle", font=ctk.CTkFont(size=12),
+        self._status_label = ctk.CTkLabel(bar, text="Idle", font=ctk.CTkFont(size=13),
                                            text_color=COLOR_TEXT_MUTED)
         self._status_label.pack(side="right", pady=10)
 
@@ -154,7 +154,7 @@ class GBNLabApp(ctk.CTk):
         panel = ctk.CTkFrame(parent, fg_color=COLOR_BG_PANEL, corner_radius=0)
         panel.grid(row=0, column=0, sticky="ns")
 
-        ctk.CTkLabel(panel, text="Parameters", font=ctk.CTkFont(size=13, weight="bold"),
+        ctk.CTkLabel(panel, text="Parameters", font=ctk.CTkFont(size=14, weight="bold"),
                      text_color=COLOR_ACCENT).pack(padx=14, pady=(14, 4), anchor="w")
 
         self._window_slider, self._window_val = self._slider(
@@ -247,7 +247,7 @@ class GBNLabApp(ctk.CTk):
                      text_color=COLOR_TEXT_MUTED).pack(side="left")
 
         self._log_text = tk.Text(log_frame, bg="#0f172a", fg=COLOR_TEXT,
-                                  font=("SF Mono", 10), wrap="word",
+                                  font=("SF Mono", 11), wrap="word",
                                   bd=0, padx=8, pady=4,
                                   insertbackground=COLOR_ACCENT,
                                   highlightthickness=0, state="disabled")
@@ -259,7 +259,7 @@ class GBNLabApp(ctk.CTk):
         self._log_text.tag_configure("warn", foreground=COLOR_WARNING)
         self._log_text.tag_configure("info", foreground=COLOR_ACCENT)
         self._log_text.tag_configure("ts", foreground=COLOR_TEXT_MUTED,
-                                      font=("SF Mono", 9))
+                                      font=("SF Mono", 10))
 
     # ── Right: Metrics ──────────────────────────────────────────────────────
 
@@ -267,7 +267,7 @@ class GBNLabApp(ctk.CTk):
         panel = ctk.CTkFrame(parent, fg_color=COLOR_BG_PANEL, corner_radius=0)
         panel.grid(row=0, column=2, sticky="ns")
 
-        ctk.CTkLabel(panel, text="Performance", font=ctk.CTkFont(size=13, weight="bold"),
+        ctk.CTkLabel(panel, text="Performance", font=ctk.CTkFont(size=14, weight="bold"),
                      text_color=COLOR_ACCENT).pack(padx=14, pady=(14, 8), anchor="w")
 
         self._cards: dict[str, MetricCard] = {}
@@ -283,10 +283,10 @@ class GBNLabApp(ctk.CTk):
             self._cards[key].pack(fill="x", padx=10, pady=(0, 6))
 
         # Event counts
-        ctk.CTkLabel(panel, text="Channel Stats", font=ctk.CTkFont(size=11, weight="bold"),
+        ctk.CTkLabel(panel, text="Channel Stats", font=ctk.CTkFont(size=12, weight="bold"),
                      text_color=COLOR_TEXT_MUTED).pack(padx=14, pady=(14, 4), anchor="w")
         self._chan_label = ctk.CTkLabel(panel, text="Lost: --  Corrupted: --",
-                                         font=ctk.CTkFont(size=11),
+                                         font=ctk.CTkFont(size=12),
                                          text_color=COLOR_TEXT_MUTED)
         self._chan_label.pack(padx=14, anchor="w")
 
@@ -695,16 +695,16 @@ class GBNLabApp(ctk.CTk):
         # ── Labels ──
         self._canvas.create_text(margin_left, sender_y - 24,
                                   text="SENDER", anchor="w",
-                                  fill=COLOR_ACCENT, font=("SF Mono", 13, "bold"))
+                                  fill=COLOR_ACCENT, font=("SF Mono", 14, "bold"))
         self._canvas.create_text(margin_left, recv_y - 24,
                                   text="RECEIVER", anchor="w",
-                                  fill=COLOR_SUCCESS, font=("SF Mono", 13, "bold"))
+                                  fill=COLOR_SUCCESS, font=("SF Mono", 14, "bold"))
 
         # ── Channel line ──
         self._canvas.create_line(0, mid_y, w, mid_y, fill=COLOR_BORDER,
                                   dash=(6, 4), width=1)
         self._canvas.create_text(w // 2, mid_y - 12, text="CHANNEL",
-                                  fill=COLOR_TEXT_MUTED, font=("SF Mono", 9))
+                                  fill=COLOR_TEXT_MUTED, font=("SF Mono", 10))
 
         # ══════════════════════════════════════════════════════════════════════
         # SENDER WINDOW — aligned by ABSOLUTE packet ID (same grid as receiver)
@@ -966,12 +966,12 @@ class GBNLabApp(ctk.CTk):
                                   text=f"Delivered: {delivered}/{total}  |  "
                                        f"Sent (unacked): {sent_count}",
                                   anchor="w", fill=COLOR_TEXT_MUTED,
-                                  font=("SF Mono", 10))
+                                  font=("SF Mono", 11))
 
         lx = w - margin_right - 120
         ly = recv_y + shared_box + 40
         items = [
-            (COLOR_SENT, "Sent / Unacked"),
+            (COLOR_SENT, "Sent / UnACKed"),
             (COLOR_ACKED, "ACKed / Received"),
             (COLOR_TIMEOUT, "Timed out / Corrupt"),
             (COLOR_UNSENT, "Not yet sent"),

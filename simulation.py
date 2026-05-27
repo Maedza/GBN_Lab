@@ -217,7 +217,7 @@ class GBNSimulation:
         self._running = False
         self._event_count: int = 0  # for throttling emits
 
-        # Timer tracking — GBN uses ONE timer for the oldest unacked packet
+        # Timer tracking — GBN uses ONE timer for the oldest unACKed packet
         self._timeout_pending: bool = False
 
     # ── Public API ───────────────────────────────────────────────────────────
@@ -416,7 +416,7 @@ class GBNSimulation:
             self.state.flying_packets.append(
                 {"pkt": pid, "dir": "send", "result": "ok"})
 
-        # GBN: only ONE timer tracks the oldest unacked packet (base)
+        # GBN: only ONE timer tracks the oldest unACKed packet (base)
         if not self._timeout_pending and pid == self.state.base:
             self._timeout_pending = True
             out.append(SimEvent(event.time + self.timeout_ms,
@@ -571,7 +571,7 @@ class GBNSimulation:
                 self.state.sent.add(self.state.next_seq)
                 self.state.next_seq += 1
 
-            # GBN: restart timer for new base if unacked packets remain
+            # GBN: restart timer for new base if unACKed packets remain
             if self.state.base < self.state.next_seq and not self._timeout_pending:
                 self._timeout_pending = True
                 out.append(SimEvent(self._sim_time + self.timeout_ms,
