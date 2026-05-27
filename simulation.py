@@ -1,35 +1,8 @@
-"""
-Go-Back-N ARQ Protocol — Simulation Engine.
-
-Combines the channel model, discrete-event engine, and Go-Back-N
-protocol logic into a single cohesive module for clarity.
-
-Conceptually, Go-Back-N works as follows:
-
-    SENDER                                     RECEIVER
-    ┌─────────────────┐                        ┌──────────────┐
-    │ Window N=4      │  ═══ PACKET 0 ═══►     │ expected: 0  │
-    │ [0][1][2][3]    │  ═══ PACKET 1 ═══►     │              │
-    │  ▲               │  ◄═══ ACK 0  ════      │              │
-    │ base            │  ═══ PACKET 2 ═══►     │              │
-    │                 │  (PACKET 3 LOST)        │              │
-    │                 │  ... TIMEOUT ...        │              │
-    │ [2][3][4][5]    │  ═══ PACKET 2 ═══►     │ discards 4,5 │
-    │  ▲               │  ═══ PACKET 3 ═══►     │              │
-    │ base            │  ═══ PACKET 4 ═══►     │              │
-    └─────────────────┘                        └──────────────┘
-
-Key rules:
-  • Sender transmits up to N packets without waiting for ACKs.
-  • Receiver ONLY accepts packets in order; out-of-order packets are discarded.
-  • Cumulative ACK: ACK(N) acknowledges all packets up to and including N.
-  • On timeout, sender retransmits ALL unacknowledged packets in the window.
-"""
+"""Go-Back-N ARQ Protocol — Simulation Engine."""
 
 from __future__ import annotations
 
 import heapq
-import math
 import queue
 import random
 import threading
@@ -37,10 +10,6 @@ import time as _time
 from dataclasses import dataclass, field
 from typing import Optional
 
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# Event Types & Data Classes
-# ═══════════════════════════════════════════════════════════════════════════════
 
 class EventType:
     PACKET_SENT = "PACKET_SENT"
@@ -65,9 +34,7 @@ class SimEvent:
     meta: dict = field(default_factory=dict, compare=False)
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
 # Channel Model
-# ═══════════════════════════════════════════════════════════════════════════════
 
 class Channel:
     """Simulates a noisy communication channel with BER and packet loss."""
@@ -118,45 +85,27 @@ class Channel:
         self.lost = 0
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
 # Go-Back-N Protocol State
-# ═══════════════════════════════════════════════════════════════════════════════
 
 class GBNState:
     """Snapshot of the Go-Back-N sender and receiver at a given moment."""
     def __init__(self):
         # Sender
-        self.base: int = 0               # oldest unacknowledged sequence number
-        self.next_seq: int = 0           # next sequence number to send
-        self.sent: set = set()           # packet IDs sent but not yet ACKed
-        self.timed_out: set = set()      # packet IDs that triggered timeout
+        self.base: int = 0
+        self.next_seq: int = 0
+        self.sent: set = set()
+        self.timed_out: set = set()
 
         # Receiver
-        self.expected: int = 0           # next expected in-order packet
-        self.received: set = set()       # correctly received packet IDs
-        self.corrupted: set = set()      # corrupted packet IDs
-
-        # Flying visualisation hints
-        self.flying_packets: list[dict] = []   # {pkt_id, dir, label}
-        self.last_event: str = "Idle"
+        self.expected: int = 0
+        self.received: set = set()
+        self.corrupted: set = set()
 
         # Resend visual — which window range is currently being retransmitted
         self.retransmitting_window: tuple | None = None
         self.retransmit_frame: int = 0
 
-        # Landing tracker — per-packet receiver-slot mapping for GUI logging
-        self.packet_landings: list[dict] = []  # {pkt, receiver_slot, time, result}
 
-        # Duplicate-ACK suppression: once the receiver has sent a
-        # cumulative ACK for a given sequence number, it skips
-        # re-sending the same ACK on subsequent out-of-order arrivals.
-        # Resets when a new in-order packet is accepted.
-        self._last_dup_ack_sent: int | None = None
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# Go-Back-N Simulation Engine
-# ═══════════════════════════════════════════════════════════════════════════════
 
 class GBNSimulation:
     """Complete Go-Back-N simulation: channel + protocol + event engine.
@@ -220,7 +169,16 @@ class GBNSimulation:
         # Timer tracking — GBN uses ONE timer for the oldest unACKed packet
         self._timeout_pending: bool = False
 
-    # ── Public API ───────────────────────────────────────────────────────────
+    @property
+    def _timer_ms(self) -> float:
+        """Adaptive timeout: 3× estimated RTT, capped by the user slider.
+
+        The window retransmits quickly when no ACK arrives (slide back),
+        but the user can set an even shorter cap via the timeout slider.
+        """
+        rtt = 2 * self.propagation_delay_ms + self._tx_time_ms
+        computed = rtt * 3
+        return min(self.timeout_ms, computed) if self.timeout_ms > 0 else computed
 
     @property
     def running(self) -> bool:
@@ -267,7 +225,7 @@ class GBNSimulation:
         # Seed: send up to N initial packets
         initial_count = min(self.window_size, self.num_packets)
         for i in range(initial_count):
-            self._push(self._make_send_event(i))
+            heapq.heappush(self._event_heap, self._make_send_event(i))
             self.state.sent.add(i)
         # CRITICAL: next_seq must reflect ALL scheduled packets immediately,
         # otherwise early ACKs will re-send packets still in the future heap
@@ -294,8 +252,6 @@ class GBNSimulation:
                 break
         return msgs
 
-    # ── Internal: Event Loop ─────────────────────────────────────────────────
-
     def _run(self) -> None:
         """Main event loop, runs in background thread with rate-limiting.
 
@@ -303,16 +259,6 @@ class GBNSimulation:
         each so the event log and animation are human-readable.
         """
         while not self._stop.is_set() and self._event_heap:
-            # Completion check
-            if self.delivered >= self.num_packets:
-                self.end_time = self._sim_time
-                # Drain remaining ACK events so the GUI doesn't show stale
-                # "ACK in the air" after all packets are delivered.
-                self._drain_ack_events()
-                self._emit({"type": "done", "metrics": self.metrics})
-                self._running = False
-                return
-
             event = heapq.heappop(self._event_heap)
             self._sim_time = event.time
             self._event_count += 1
@@ -324,45 +270,54 @@ class GBNSimulation:
                     evt.time = self._sim_time + 0.001
                 heapq.heappush(self._event_heap, evt)
 
-            self.state.last_event = self._describe(event)
-
-            # Emit EVERY event so the log reads step by step
+            # Emit every event so the log reads step by step
             self._emit({"type": "event", "event": event, "state_snapshot": self._make_snapshot()})
+
+            # Completion check AFTER emit → last packet receive + its ACK
+            # chain are always visible before the "done" banner.
+            if self.delivered >= self.num_packets:
+                self.end_time = self._sim_time
+                self._drain_ack_events()
+                self._emit({"type": "done", "metrics": self.metrics})
+                self._running = False
+                return
 
             # Pace: at sim_speed=1.0 → 80ms/event, at 0.2 → 400ms/event
             _time.sleep(0.08 / self.sim_speed)
 
-        # Natural completion
+        # Natural completion (heap emptied without hitting delivered count)
         if self.delivered >= self.num_packets:
             self.end_time = self._sim_time
             self._emit({"type": "done", "metrics": self.metrics})
         self._running = False
 
-    def _drain_ack_events(self) -> None:
-        """Silently process all remaining ACK events in the heap.
+    def _drain_ack_events(self, max_iter: int = 50) -> None:
+        """Emit remaining ACK events so the GUI shows the final acknowledgments.
 
         After all data packets are delivered, the receiver's final ACK
         may still be in the heap (ACK_SENT at receiver → ACK_RECEIVED at
-        sender).  Without draining, the GUI shows a stale "ACK still
-        flying" dot after the simulation says DONE.
+        sender).  Emit them as regular events so the user sees the
+        simulation wrap up cleanly.
         """
         ack_types = {EventType.ACK_SENT, EventType.ACK_RECEIVED,
                      EventType.ACK_LOST, EventType.ACK_CORRUPTED}
-        drained = 0
-        limit = len(self._event_heap)
-        while drained < limit and self._event_heap:
-            # Only drain ACK-type events; leave anything else untouched
+        for _ in range(max_iter):
+            if not self._event_heap:
+                break
             event = self._event_heap[0]
             if event.type not in ack_types:
                 break
             heapq.heappop(self._event_heap)
-            drained += 1
             self._sim_time = event.time
             new = self._step(event)
             for evt in new:
                 if evt.time < self._sim_time:
                     evt.time = self._sim_time + 0.001
                 heapq.heappush(self._event_heap, evt)
+            # Emit this ACK so the GUI displays it before the "done" banner
+            self._emit({"type": "event", "event": event, "state_snapshot": self._make_snapshot()})
+            # Let the GUI render this ACK before the next event
+            _time.sleep(0.08 / self.sim_speed)
 
     def _step(self, event: SimEvent) -> list[SimEvent]:
         """Route an event to the appropriate handler."""
@@ -383,7 +338,6 @@ class GBNSimulation:
             return self._on_timeout(event)
         return []
 
-    # ── Event Handlers ───────────────────────────────────────────────────────
 
     def _on_packet_sent(self, event: SimEvent) -> list[SimEvent]:
         out = []
@@ -403,23 +357,17 @@ class GBNSimulation:
             self.errors += 1
             self.state.corrupted.add(pid)
             out.append(SimEvent(arrival, type=EventType.PACKET_LOST, packet_id=pid))
-            self.state.flying_packets.append(
-                {"pkt": pid, "dir": "send", "result": "lost"})
         elif corrupted:
             self.errors += 1
             self.state.corrupted.add(pid)
             out.append(SimEvent(arrival, type=EventType.PACKET_CORRUPTED, packet_id=pid))
-            self.state.flying_packets.append(
-                {"pkt": pid, "dir": "send", "result": "corrupt"})
         else:
             out.append(SimEvent(arrival, type=EventType.PACKET_RECEIVED, packet_id=pid))
-            self.state.flying_packets.append(
-                {"pkt": pid, "dir": "send", "result": "ok"})
 
         # GBN: only ONE timer tracks the oldest unACKed packet (base)
         if not self._timeout_pending and pid == self.state.base:
             self._timeout_pending = True
-            out.append(SimEvent(event.time + self.timeout_ms,
+            out.append(SimEvent(event.time + self._timer_ms,
                                 type=EventType.TIMEOUT, packet_id=pid))
 
         # Calculate next_seq if needed
@@ -441,18 +389,10 @@ class GBNSimulation:
             s.expected += 1
             s.corrupted.discard(pid)
 
-            # Reset duplicate-ACK suppression — a new expected slot
-            # means the next stuck-state gets its *one* signal again.
-            s._last_dup_ack_sent = None
+
 
             # Tag event so GUI knows this was accepted
             event.meta["accepted"] = True
-
-            # Log this landing for GUI verification
-            s.packet_landings.append({
-                "pkt": pid, "receiver_slot": pid, "time": round(event.time, 1),
-                "result": "accepted", "expected_before": pid,
-            })
 
             # Send cumulative ACK
             ack = s.expected - 1
@@ -461,64 +401,19 @@ class GBNSimulation:
                                 ack_id=ack, packet_id=pid,
                                 meta={"from_accept": True}))
             self.acks_sent += 1
-            self.state.flying_packets.append(
-                {"pkt": pid, "dir": "ack", "result": "ok"})
         else:
-            # Out of order — discard, re-ACK last in-order (once only)
+            # Out of order — silently discard. No duplicate ACK.
             event.meta["accepted"] = False
             event.meta["expected"] = s.expected
-
-            # CRITICAL: when expected=0, nothing has been received yet.
-            # There is no meaningful cumulative ACK to send — sending ACK #0
-            # would falsely tell the sender "packet 0 was delivered", sliding
-            # the window forward and permanently stranding the receiver.
-            # Instead, silently discard; the sender will timeout on packet 0.
-            if s.expected > 0:
-                ack = s.expected - 1
-                if ack != s._last_dup_ack_sent:
-                    s._last_dup_ack_sent = ack
-                    out.append(SimEvent(event.time + self.channel.propagation_delay_ms,
-                                        type=EventType.ACK_SENT, ack_id=ack, packet_id=pid,
-                                        meta={"from_accept": False}))
-                    self.acks_sent += 1
-                    self.state.flying_packets.append(
-                        {"pkt": pid, "dir": "ack", "result": "dup"})
-
-            # Log rejected landing
-            s.packet_landings.append({
-                "pkt": pid, "receiver_slot": pid, "time": round(event.time, 1),
-                "result": "rejected", "expected": s.expected,
-            })
-
-        # Trim old records
-        if len(s.flying_packets) > 20:
-            s.flying_packets = s.flying_packets[-16:]
-        if len(s.packet_landings) > 40:
-            s.packet_landings = s.packet_landings[-30:]
 
         return out
 
     def _on_packet_dropped(self, event: SimEvent) -> list[SimEvent]:
-        """Packet was corrupted or lost at the receiver.
+        """Packet was corrupted or lost at the receiver — drop silently.
 
-        Send ONE duplicate cumulative ACK for the last in-order packet
-        to signal the sender faster than waiting for timeout.  The
-        duplicate-ACK suppression in _on_packet_received ensures this
-        is not repeated for subsequent out-of-order arrivals.
+        No duplicate ACK is sent; the sender recovers via timeout.
         """
-        out = []
-        s = self.state
-        if s.expected > 0 and s._last_dup_ack_sent != s.expected - 1:
-            ack = s.expected - 1
-            s._last_dup_ack_sent = ack
-            out.append(SimEvent(event.time + self.channel.propagation_delay_ms,
-                                type=EventType.ACK_SENT, ack_id=ack,
-                                packet_id=event.packet_id,
-                                meta={"from_accept": False}))
-            self.acks_sent += 1
-            self.state.flying_packets.append(
-                {"pkt": event.packet_id, "dir": "ack", "result": "dup"})
-        return out
+        return []
 
     def _on_ack_sent(self, event: SimEvent) -> list[SimEvent]:
         """ACK sent from receiver — transmit back through channel."""
@@ -574,7 +469,7 @@ class GBNSimulation:
             # GBN: restart timer for new base if unACKed packets remain
             if self.state.base < self.state.next_seq and not self._timeout_pending:
                 self._timeout_pending = True
-                out.append(SimEvent(self._sim_time + self.timeout_ms,
+                out.append(SimEvent(self._sim_time + self._timer_ms,
                                     type=EventType.TIMEOUT,
                                     packet_id=self.state.base))
         else:
@@ -609,7 +504,7 @@ class GBNSimulation:
         win_start = self.state.base
         win_end = min(self.state.next_seq - 1, self.num_packets - 1)
 
-        # ── Purge ALL stale events tied to the window we are about to re-send ──
+        # Purge stale events tied to the window we are about to re-send
         # 1. Old TIMEOUT events           (one-timer GBN rule)
         # 2. Old PACKET_RECEIVED / CORRUPTED / LOST events for window packets
         #    (these would trigger spurious duplicate ACKs at the receiver)
@@ -654,13 +549,10 @@ class GBNSimulation:
             if pid < self.num_packets:
                 self.retransmissions += 1
                 self.state.sent.add(pid)
-                self.state.flying_packets.append(
-                    {"pkt": pid, "dir": "resend", "result": "timeout"})
                 out.append(self._make_send_event(pid))
 
         return out
 
-    # ── Helpers ──────────────────────────────────────────────────────────────
 
     @property
     def _tx_time_ms(self) -> float:
@@ -682,31 +574,6 @@ class GBNSimulation:
         t = self._next_send_slot
         self._next_send_slot += self._tx_time_ms
         return SimEvent(t, type=EventType.PACKET_SENT, packet_id=pkt_id)
-
-    def _describe(self, event: SimEvent) -> str:
-        et = event.type
-        pid = event.packet_id
-        if et == EventType.PACKET_SENT:
-            return f"Sent packet #{pid}"
-        elif et == EventType.PACKET_RECEIVED:
-            return f"Received packet #{pid}"
-        elif et == EventType.PACKET_CORRUPTED:
-            return f"Packet #{pid} CORRUPTED"
-        elif et == EventType.PACKET_LOST:
-            return f"Packet #{pid} LOST"
-        elif et == EventType.ACK_SENT:
-            return f"ACK #{event.ack_id} sent"
-        elif et == EventType.ACK_RECEIVED:
-            if event.meta.get("is_duplicate"):
-                return f"ACK #{event.ack_id} received (duplicate)"
-            return f"ACK #{event.ack_id} received → window slide"
-        elif et == EventType.ACK_CORRUPTED:
-            return f"ACK #{event.ack_id} CORRUPTED"
-        elif et == EventType.ACK_LOST:
-            return f"ACK #{event.ack_id} LOST"
-        elif et == EventType.TIMEOUT:
-            return f"TIMEOUT on #{pid} → retransmit window"
-        return f"{et}"
 
     def _make_snapshot(self) -> dict:
         s = self.state
@@ -731,17 +598,7 @@ class GBNSimulation:
             },
             "num_packets": self.num_packets,
             "delivered": self.delivered,
-            "last_event": s.last_event,
-            "flying": list(s.flying_packets[-16:]),
-            "landings": list(s.packet_landings[-10:]),
         }
-
-    # ── Queue Helpers ────────────────────────────────────────────────────────
-
-    def _push(self, event: SimEvent) -> None:
-        if event.time < self._sim_time:
-            event.time = self._sim_time + 0.001
-        heapq.heappush(self._event_heap, event)
 
     def _emit(self, msg: dict) -> None:
         try:

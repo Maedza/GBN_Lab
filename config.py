@@ -7,7 +7,7 @@ DEFAULT_WINDOW_SIZE = 4
 DEFAULT_BER = 0.0001          # Bit error rate (0.0 – 1.0)
 DEFAULT_PACKET_LOSS = 0.05    # Independent packet loss probability
 DEFAULT_NUM_PACKETS = 10      # Total data packets to send
-DEFAULT_TIMEOUT_MS = 300      # Timeout in milliseconds
+DEFAULT_TIMEOUT_MS = 0      # 0 = adaptive (3× RTT)
 DEFAULT_PACKET_SIZE_BITS = 1000
 DEFAULT_DATA_RATE_KBPS = 100  # Channel data rate in kbps
 DEFAULT_PROPAGATION_DELAY_MS = 10
@@ -50,19 +50,63 @@ STATUS_COMPLETE = "Complete"
 SCENARIO_PRESETS = {
     "Low Errors": {
         "window_size": 4, "ber": 0.0001, "packet_loss": 0.01,
-        "timeout_ms": 300, "num_packets": 10,
+        "timeout_ms": 0, "num_packets": 10,
+        "description": (
+            "Clean channel — bits rarely flip and packets seldom vanish. "
+            "This is GBN at its happiest: the sender fills the window, "
+            "ACKs stream back promptly, and all 10 packets arrive in order. "
+            "The timer rarely fires here."
+        ),
+        "what_to_observe": (
+            "Watch the pipeline run uninterrupted. "
+            "Notice how cumulative ACKs slide the window forward "
+            "without waiting for individual per-packet ACKs."
+        ),
     },
     "Moderate Noise": {
         "window_size": 4, "ber": 0.001, "packet_loss": 0.03,
-        "timeout_ms": 300, "num_packets": 10,
+        "timeout_ms": 0, "num_packets": 10,
+        "description": (
+            "A realistic noisy channel. Roughly 1 in 1,000 bits gets "
+            "corrupted, and a few packets (and their ACKs) drop entirely. "
+            "The sender periodically hits timeouts and resends the window."
+        ),
+        "what_to_observe": (
+            "Count how many retransmissions appear in the event log. "
+            "Notice that a single lost packet forces the entire window "
+            "to be resent — not just the missing one."
+        ),
     },
     "High BER Nightmare": {
         "window_size": 4, "ber": 0.008, "packet_loss": 0.05,
-        "timeout_ms": 200, "num_packets": 10,
+        "timeout_ms": 0, "num_packets": 10,
+        "description": (
+            "Brutal bit-error rate. Nearly 1 in 125 bits is flipped — "
+            "corruptions dominate the channel. Almost every round trip "
+            "suffers a damaged packet or garbled ACK."
+        ),
+        "what_to_observe": (
+            "Efficiency plummets here. The event log fills with "
+            "CORRUPTED and TIMEOUT entries. Compare throughput with "
+            "Low Errors — the drop is dramatic. Also, watch the "
+            "animation canvas for red (timed-out) packet states."
+        ),
     },
     "Packet Loss Hell": {
         "window_size": 4, "ber": 0.0005, "packet_loss": 0.20,
-        "timeout_ms": 250, "num_packets": 10,
+        "timeout_ms": 0, "num_packets": 10,
+        "description": (
+            "High packet loss — 1 in 5 packets simply disappears. "
+            "Bit errors are rare; the problem is the channel silently "
+            "swallowing packets (and their ACKs). GBN's window-based "
+            "retransmission means every loss triggers a burst of re-sends."
+        ),
+        "what_to_observe": (
+            "Look for 'LOST' and 'DISCARD' log entries. When a packet "
+            "vanishes, the sender sends subsequent ones that the receiver "
+            "throws away (out-of-order). After timeout, all in-flight "
+            "packets get retransmitted at once."
+        ),
     },
 }
 

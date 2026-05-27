@@ -25,7 +25,7 @@ from config import (
     GUI_UPDATE_INTERVAL_MS, ANIMATION_INTERVAL_MS,
     PACKET_BOX_SIZE, PACKET_SPACING, MAX_LOG_EVENTS,
     COLOR_BG, COLOR_BG_PANEL, COLOR_BG_HIGHLIGHT,
-    COLOR_ACCENT, COLOR_SUCCESS, COLOR_ERROR, COLOR_WARNING,
+    COLOR_ACCENT, COLOR_BRAND, COLOR_SUCCESS, COLOR_ERROR, COLOR_WARNING,
     COLOR_TEXT, COLOR_TEXT_MUTED, COLOR_BORDER,
     COLOR_UNSENT, COLOR_SENT, COLOR_ACKED, COLOR_TIMEOUT,
     STATUS_IDLE, STATUS_RUNNING, STATUS_COMPLETE,
@@ -34,17 +34,13 @@ from config import (
 from simulation import GBNSimulation, EventType
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
 # Theme setup
-# ═══════════════════════════════════════════════════════════════════════════════
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
 # Metric Card
-# ═══════════════════════════════════════════════════════════════════════════════
 
 class MetricCard(ctk.CTkFrame):
     """A single metric display: title + large value + unit."""
@@ -64,9 +60,7 @@ class MetricCard(ctk.CTkFrame):
         self._value.configure(text=text)
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
 # Main Application
-# ═══════════════════════════════════════════════════════════════════════════════
 
 class GBNLabApp(ctk.CTk):
     """Go-Back-N ARQ Protocol Simulator — main window."""
@@ -117,10 +111,14 @@ class GBNLabApp(ctk.CTk):
         self._FAIL_POINT = 0.65                       # where failed packets stop mid-flight
         self._FAIL_DISPLAY_FRAMES = 10                # frames to show X before removing
 
+        # Scenario context (set by dropdown)
+        self._active_scenario: Optional[dict] = None
+
         # Feature flags
         self._step_mode = False
         self._step_paused = False
-        self._neon = True
+        self._last_paused_anomaly = None  # skip consecutive same-type pauses
+        self._canvas_size = (0, 0)  # track resize to avoid redrawing static items
         self._sim_speed_replay = DEFAULT_SIM_SPEED  # stored for replay pacing
 
         self._build_ui()
@@ -138,9 +136,7 @@ class GBNLabApp(ctk.CTk):
         self.bind_all("<Control-q>", lambda e: self._force_quit())
         self.bind_all("<Command-w>", lambda e: self._on_close())
 
-    # ══════════════════════════════════════════════════════════════════════════
     # Build UI
-    # ══════════════════════════════════════════════════════════════════════════
 
     def _build_ui(self) -> None:
         # ---- Title bar ----
@@ -180,7 +176,6 @@ class GBNLabApp(ctk.CTk):
         self._build_center(body)
         self._build_metrics_panel(body)
 
-    # ── Left: Controls ──────────────────────────────────────────────────────
 
     def _build_controls(self, parent) -> None:
         panel = ctk.CTkFrame(parent, fg_color=COLOR_BG_PANEL, corner_radius=0)
@@ -210,7 +205,10 @@ class GBNLabApp(ctk.CTk):
         self._loss_slider, self._loss_val = self._slider(
             panel, "Packet Loss", DEFAULT_PACKET_LOSS, 0.0, 0.5, 0.01)
         self._timeout_slider, self._timeout_val = self._slider(
-            panel, "Timeout (ms)", DEFAULT_TIMEOUT_MS, 100, 2000, 50)
+            panel, "Timeout (ms)", DEFAULT_TIMEOUT_MS, 0, 2000, 50)
+        self._timeout_slider.configure(
+            command=lambda v: self._timeout_val.configure(
+                text="auto" if float(v) == 0 else str(int(float(v)))))
         self._packets_slider, self._packets_val = self._slider(
             panel, "Packets to Send", DEFAULT_NUM_PACKETS, 1, 20, 1)
         self._speed_slider, self._speed_val = self._slider(
@@ -219,18 +217,17 @@ class GBNLabApp(ctk.CTk):
         self._speed_slider.configure(
             command=lambda v: self._speed_val.configure(text=f"{float(v):.1f}x"))
 
-        # Info about what each parameter does
-        info = (
-            "GBN sends up to N packets\n"
-            "without waiting for ACKs.\n"
-            "On timeout, retransmits\n"
-            "the entire window."
+        # Quick-start guide
+        guide = (
+            "Pick a scenario above, then\n"
+            "click Run. Step-by-Step mode\n"
+            "pauses on anomalies like timeouts\n"
+            "and packet loss."
         )
-        ctk.CTkLabel(panel, text=info, font=ctk.CTkFont(size=10),
+        ctk.CTkLabel(panel, text=guide, font=ctk.CTkFont(size=10),
                      text_color=COLOR_TEXT_MUTED, justify="left",
                      wraplength=200).pack(padx=14, pady=(20, 10), anchor="w")
 
-        # ── Step-by-step mode toggle ──
         self._step_mode_var = ctk.BooleanVar(value=False)
         self._step_switch = ctk.CTkSwitch(
             panel, text="Step-by-Step Mode", variable=self._step_mode_var,
@@ -241,23 +238,7 @@ class GBNLabApp(ctk.CTk):
         )
         self._step_switch.pack(padx=14, pady=(0, 2), anchor="w")
 
-        ctk.CTkLabel(panel, text="Pause after each event with explanations",
-                     font=ctk.CTkFont(size=9),
-                     text_color=COLOR_TEXT_MUTED, justify="left",
-                     ).pack(padx=28, pady=(0, 6), anchor="w")
-
-        # ── Neon glow mode toggle ──
-        self._neon_var = ctk.BooleanVar(value=True)
-        self._neon_switch = ctk.CTkSwitch(
-            panel, text="Neon Glow Mode", variable=self._neon_var,
-            command=self._on_neon_toggle,
-            font=ctk.CTkFont(size=11),
-            progress_color=COLOR_WARNING, button_color=COLOR_TEXT,
-            text_color=COLOR_TEXT_MUTED,
-        )
-        self._neon_switch.pack(padx=14, pady=(0, 2), anchor="w")
-
-        ctk.CTkLabel(panel, text="Glowing packet effects for demos",
+        ctk.CTkLabel(panel, text="Pauses on anomalies like timeouts, loss, corruption",
                      font=ctk.CTkFont(size=9),
                      text_color=COLOR_TEXT_MUTED, justify="left",
                      ).pack(padx=28, pady=(0, 6), anchor="w")
@@ -274,25 +255,6 @@ class GBNLabApp(ctk.CTk):
             panel, text="Reset", fg_color="#475569", hover_color="#334155",
             command=self._on_reset, **btn_opts)
         self._stop_btn.pack(padx=14, pady=(0, 4))
-
-        # ── Save / Load / Export ──
-        ctk.CTkLabel(panel, text="Data", font=ctk.CTkFont(size=11, weight="bold"),
-                     text_color=COLOR_TEXT_MUTED).pack(padx=14, pady=(12, 4), anchor="w")
-
-        row1 = ctk.CTkFrame(panel, fg_color="transparent")
-        row1.pack(fill="x", padx=14, pady=(0, 3))
-        ctk.CTkButton(row1, text="Save .gbn", width=100, height=28,
-                      font=ctk.CTkFont(size=11), fg_color="#334155",
-                      hover_color="#475569", command=self._on_save).pack(side="left", padx=(0, 4))
-        ctk.CTkButton(row1, text="Load .gbn", width=100, height=28,
-                      font=ctk.CTkFont(size=11), fg_color="#334155",
-                      hover_color="#475569", command=self._on_load).pack(side="left")
-
-        ctk.CTkButton(panel, text="Export GIF", width=210, height=28,
-                      font=ctk.CTkFont(size=11), fg_color="#6366f1",
-                      hover_color="#4f46e5", command=self._on_export_gif).pack(padx=14, pady=(4, 0))
-
-        self._load_saved_state: Optional[dict] = None
 
     def _slider(self, parent, label: str, default: float, lo: float, hi: float,
                 step: float) -> tuple[ctk.CTkSlider, ctk.CTkLabel]:
@@ -319,7 +281,6 @@ class GBNLabApp(ctk.CTk):
         s.pack(side="left", fill="x", expand=True, padx=(0, 8))
         return s, val_lbl
 
-    # ── Center: Animation + Event Log ───────────────────────────────────────
 
     def _build_center(self, parent) -> None:
         center = ctk.CTkFrame(parent, fg_color="transparent")
@@ -333,14 +294,12 @@ class GBNLabApp(ctk.CTk):
         self._canvas = tk.Canvas(center, bg=COLOR_BG, highlightthickness=0)
         self._canvas.grid(row=0, column=0, sticky="nsew", pady=(0, 2))
 
-        # ── Progress / Replay bar (dual-purpose) ──
         scrub_frame = ctk.CTkFrame(center, fg_color=COLOR_BG_PANEL, corner_radius=6,
                                    height=36)
         scrub_frame.grid(row=1, column=0, sticky="ew", pady=(0, 2))
         scrub_frame.pack_propagate(False)
         scrub_frame.grid_propagate(False)
 
-        # ── Sim progress sub-frame (shown during sim) ──
         self._sim_progress_frame = ctk.CTkFrame(scrub_frame, fg_color="transparent",
                                                  height=34)
         self._sim_progress_frame.pack(fill="x", expand=True)
@@ -351,7 +310,6 @@ class GBNLabApp(ctk.CTk):
         )
         self._progress_label.pack(side="left", padx=(12, 0))
 
-        # ── Replay control sub-frame (shown after completion) ──
         self._replay_frame = ctk.CTkFrame(scrub_frame, fg_color="transparent",
                                           height=34)
 
@@ -416,7 +374,6 @@ class GBNLabApp(ctk.CTk):
         self._log_text.tag_configure("ts", foreground=COLOR_TEXT_MUTED,
                                       font=("SF Mono", 10))
 
-    # ── Right: Metrics ──────────────────────────────────────────────────────
 
     def _build_metrics_panel(self, parent) -> None:
         panel = ctk.CTkFrame(parent, fg_color=COLOR_BG_PANEL, corner_radius=0)
@@ -445,9 +402,7 @@ class GBNLabApp(ctk.CTk):
                                          text_color=COLOR_TEXT_MUTED)
         self._chan_label.pack(padx=14, anchor="w")
 
-    # ══════════════════════════════════════════════════════════════════════════
     # Status
-    # ══════════════════════════════════════════════════════════════════════════
 
     _STATUS_COLORS = {
         STATUS_IDLE: "#475569",
@@ -460,9 +415,7 @@ class GBNLabApp(ctk.CTk):
         self._status_dot.itemconfig(self._dot, fill=color)
         self._status_label.configure(text=status, text_color=color)
 
-    # ══════════════════════════════════════════════════════════════════════════
     # Event Handlers
-    # ══════════════════════════════════════════════════════════════════════════
 
     def _on_scenario_select(self, name: str) -> None:
         """Load a preset scenario's parameters into the sliders.
@@ -472,6 +425,7 @@ class GBNLabApp(ctk.CTk):
         by the user.  Changing a scenario should not change playback speed.
         """
         if name == "Custom":
+            self._active_scenario = None
             return
         preset = SCENARIO_PRESETS.get(name)
         if not preset:
@@ -485,15 +439,18 @@ class GBNLabApp(ctk.CTk):
         self._window_val.configure(text=str(preset["window_size"]))
         self._ber_val.configure(text=f"{preset['ber']:.4f}")
         self._loss_val.configure(text=f"{preset['packet_loss']:.2f}")
-        self._timeout_val.configure(text=str(preset["timeout_ms"]))
+        to_ms = preset["timeout_ms"]
+        self._timeout_val.configure(text="auto" if to_ms == 0 else str(to_ms))
         self._packets_val.configure(text=str(preset["num_packets"]))
+        # Store scenario context for step-by-step overlay
+        self._active_scenario = {
+            "name": name,
+            "description": preset.get("description", ""),
+            "what_to_observe": preset.get("what_to_observe", ""),
+        }
 
     def _on_step_mode_toggle(self) -> None:
         self._step_mode = self._step_mode_var.get()
-
-    def _on_neon_toggle(self) -> None:
-        self._neon = self._neon_var.get()
-        self._redraw_canvas()
 
     def _on_start(self) -> None:
         self._reset_ui()
@@ -520,8 +477,9 @@ class GBNLabApp(ctk.CTk):
         self._sim_speed_replay = sim_speed  # store for replay pacing
 
         # Log initial info BEFORE starting the sim so it appears first
+        to_label = "auto" if timeout_ms == 0 else f"{timeout_ms}ms"
         self._log("info", f"Go-Back-N |  N={window_size}  BER={ber:.4f}  "
-                  f"loss={packet_loss:.0%}  pkts={num_packets}  timeout={timeout_ms}ms")
+                  f"loss={packet_loss:.0%}  pkts={num_packets}  timeout={to_label}")
 
         self._sim.start()
         self._set_status(STATUS_RUNNING)
@@ -545,107 +503,6 @@ class GBNLabApp(ctk.CTk):
         # Start animation (only during simulation)
         self._start_animation()
 
-    # ── Save / Load / Export ─────────────────────────────────────────────────
-
-    def _on_save(self) -> None:
-        """Save current config + event history as .gbn file."""
-        from tkinter import filedialog
-        from persistence import save_gbn
-
-        config = {
-            "window_size": int(self._window_slider.get()),
-            "ber": round(self._ber_slider.get(), 4),
-            "packet_loss": round(self._loss_slider.get(), 4),
-            "timeout_ms": int(self._timeout_slider.get()),
-            "num_packets": int(self._packets_slider.get()),
-            "sim_speed": round(self._speed_slider.get(), 1),
-        }
-        # Serialise event log
-        log_text = self._log_text.get("1.0", "end-1c")
-        events = [{"line": line} for line in log_text.split("\n") if line.strip()]
-
-        path = filedialog.asksaveasfilename(
-            defaultextension=".gbn",
-            filetypes=[("GBN State Files", "*.gbn"), ("All Files", "*.*")],
-            title="Save Simulation State",
-        )
-        if path:
-            save_gbn(path, config, events)
-            self._log("info", f"State saved to {path}")
-
-    def _on_load(self) -> None:
-        """Load a .gbn file and populate the parameter sliders."""
-        from tkinter import filedialog
-        from persistence import load_gbn
-
-        path = filedialog.askopenfilename(
-            filetypes=[("GBN State Files", "*.gbn"), ("All Files", "*.*")],
-            title="Load Simulation State",
-        )
-        if not path:
-            return
-
-        data = load_gbn(path)
-        if not data:
-            self._log("err", f"Failed to load {path} — invalid .gbn file")
-            return
-
-        cfg = data["config"]
-        self._window_slider.set(cfg.get("window_size", 4))
-        self._ber_slider.set(cfg.get("ber", 0.0001))
-        self._loss_slider.set(cfg.get("packet_loss", 0.05))
-        self._timeout_slider.set(cfg.get("timeout_ms", 300))
-        self._packets_slider.set(cfg.get("num_packets", 10))
-        self._speed_slider.set(cfg.get("sim_speed", 0.3))
-        # Update labels
-        self._window_val.configure(text=str(cfg.get("window_size", 4)))
-        self._ber_val.configure(text=f"{cfg.get('ber', 0.0001):.4f}")
-        self._loss_val.configure(text=f"{cfg.get('packet_loss', 0.05):.2f}")
-        self._timeout_val.configure(text=str(cfg.get("timeout_ms", 300)))
-        self._packets_val.configure(text=str(cfg.get("num_packets", 10)))
-        self._speed_val.configure(text=f"{cfg.get('sim_speed', 0.3):.1f}x")
-
-        # Reset scenario dropdown to "Custom" since we loaded custom params
-        self._scenario_var.set("Custom")
-
-        # Restore event log
-        self._log_text.configure(state="normal")
-        self._log_text.delete("1.0", "end")
-        for event in data.get("events", []):
-            line = event.get("line", "")
-            self._log_text.insert("end", line + "\n")
-        self._log_text.see("end")
-        self._log_text.configure(state="disabled")
-
-        self._log("info", f"Loaded state from {path}")
-        self._load_saved_state = data
-
-    def _on_export_gif(self) -> None:
-        """Export current canvas as an animated GIF."""
-        from tkinter import filedialog
-        from persistence import export_gif
-
-        path = filedialog.asksaveasfilename(
-            defaultextension=".gif",
-            filetypes=[("Animated GIF", "*.gif"), ("All Files", "*.*")],
-            title="Export Animation as GIF",
-        )
-        if not path:
-            return
-
-        self._log("info", "Exporting GIF — capturing frames...")
-        self.update()  # force canvas redraw
-
-        # Capture current canvas
-        w = self._canvas.winfo_width()
-        h = self._canvas.winfo_height()
-
-        success = export_gif(self._canvas, path, width=w, height=h,
-                             num_frames=20, delay_ms=120)
-        if success:
-            self._log("ok", f"GIF exported to {path}")
-        else:
-            self._log("err", "GIF export failed")
 
     def _on_reset(self) -> None:
         if self._sim:
@@ -689,9 +546,7 @@ class GBNLabApp(ctk.CTk):
         self._canvas.delete("all")
         self._draw_placeholder()
 
-    # ══════════════════════════════════════════════════════════════════════════
     # Polling
-    # ══════════════════════════════════════════════════════════════════════════
 
     def _start_polling(self) -> None:
         if self._poll_id:
@@ -735,11 +590,16 @@ class GBNLabApp(ctk.CTk):
                     "anim_frame": self._anim_frame,
                 })
 
-                # Pause in step mode after each event
+                # Pause in step mode — skip routine events, stop on anomalies
                 if self._step_mode:
-                    self._step_paused = True
-                    self._pause_for_step(msg["event"])
-                    return  # stop processing for now
+                    if evt.type not in self._SKIP_EVENTS:
+                        if evt.type == self._last_paused_anomaly:
+                            pass  # same anomaly back-to-back: don't re-pause
+                        else:
+                            self._last_paused_anomaly = evt.type
+                            self._step_paused = True
+                            self._pause_for_step(evt)
+                            return  # stop processing for now
 
             elif t == "tick":
                 self._last_snapshot = msg.get("state_snapshot", {})
@@ -759,116 +619,90 @@ class GBNLabApp(ctk.CTk):
                 self._destroy_step_frame()
                 self._on_done(self._sim.metrics)
 
-    # ── Step-by-step helpers ────────────────────────────────────────────────
 
-    _EXPLANATIONS = {
-        EventType.PACKET_SENT:
-            "Packet pushed onto the wire.\n"
-            "GBN sends up to N packets back-to-back without waiting.\n"
-            "One timer guards the oldest packet still in flight.",
-        EventType.PACKET_RECEIVED:
-            "Packet arrived at the receiver.\n"
-            "If it's the next one in sequence → keep it, send ACK.\n"
-            "ACK says: 'got everything up to this point.'",
-        EventType.PACKET_CORRUPTED:
-            "Packet arrived but bits flipped in transit.\n"
-            "Receiver tosses it. Same as never arriving.\n"
-            "Sender won't know until the timer runs out.",
-        EventType.PACKET_LOST:
-            "Packet never reached the receiver — gone.\n"
-            "No ACK will come back. The timer will expire,\n"
-            "then the whole unsent window gets re-fired.",
-        EventType.ACK_SENT:
-            "Receiver sends ACK(N): 'I have packets 0 through N.'\n"
-            "This one ACK covers every earlier packet too.\n"
-            "Cumulative — one ACK, not one per packet.",
-        EventType.ACK_RECEIVED:
-            "Sender gets the ACK. Window slides forward.\n"
-            "Now there's room to push fresh packets onto the wire.\n"
-            "Timer resets to the new oldest unACKed packet.",
-        EventType.ACK_CORRUPTED:
-            "ACK arrived garbled — sender ignores it.\n"
-            "No sliding, no new packets sent.\n"
-            "Timer still ticking. It'll retry when it fires.",
-        EventType.ACK_LOST:
-            "ACK never made it back.\n"
-            "Looks exactly like a corrupted ACK to the sender.\n"
-            "Same outcome: wait for timeout, then resend window.",
-        EventType.TIMEOUT:
-            "Timer fired — oldest packet was never ACKed.\n"
-            "This is GBN's recovery: the full window [base .. next-1]\n"
-            "gets retransmitted. Anything out-of-order at the receiver\n"
-            "is thrown away — only in-order packets count.",
-    }
+    # Event types skipped by step mode (routine, non-anomaly events)
+    _SKIP_EVENTS = {EventType.PACKET_SENT, EventType.PACKET_RECEIVED,
+                    EventType.ACK_SENT, EventType.ACK_RECEIVED}
 
     def _destroy_step_frame(self) -> None:
         """Remove the floating step-control overlay if it exists."""
         if hasattr(self, "_step_frame") and self._step_frame.winfo_exists():
             self._step_frame.destroy()
 
+    # Seconds before auto-continue in step mode
+    _STEP_AUTO_SECONDS = 4
+
     def _pause_for_step(self, event) -> None:
-        """Pause simulation and show a clear overlay with explanation + controls."""
+        """Pause simulation on an anomaly — compact bar with countdown + Next button."""
         self._step_paused = True
-        self._set_status("Step — Paused")
-        self._status_label.configure(text_color=COLOR_WARNING)
 
         # Destroy any previous overlay
         self._destroy_step_frame()
 
-        # Build fresh overlay so we never have stale widget-parent issues
-        self._step_frame = ctk.CTkFrame(self, fg_color=COLOR_BG_PANEL, corner_radius=10,
-                                        border_width=2, border_color=COLOR_WARNING)
-        self._step_frame.place(relx=0.5, rely=0.90, anchor="s")
+        # Compact overlay bar
+        self._step_frame = ctk.CTkFrame(self, fg_color=COLOR_BG_PANEL, corner_radius=8,
+                                        border_width=1, border_color=COLOR_WARNING)
+        self._step_frame.place(relx=0.5, rely=0.93, anchor="s")
 
-        # Title
+        # Single row: icon + event type + countdown + button
+        row = ctk.CTkFrame(self._step_frame, fg_color="transparent")
+        row.pack(padx=12, pady=(8, 8))
+
         ctk.CTkLabel(
-            self._step_frame, text=f"▶ STEP PAUSED — {event.type}",
-            font=ctk.CTkFont(size=13, weight="bold"),
+            row, text=f"⏸  {event.type}",
+            font=ctk.CTkFont(size=12, weight="bold"),
             text_color=COLOR_WARNING,
-        ).pack(padx=16, pady=(10, 2))
+        ).pack(side="left", padx=(0, 12))
 
-        # Explanation
-        explanation = self._EXPLANATIONS.get(event.type, "No explanation available.")
-        ctk.CTkLabel(
-            self._step_frame, text=explanation,
-            font=ctk.CTkFont(size=11), text_color=COLOR_TEXT,
-            justify="left", wraplength=420,
-        ).pack(padx=16, pady=(2, 8))
+        self._step_countdown = self._STEP_AUTO_SECONDS
+        self._step_timer_label = ctk.CTkLabel(
+            row, text=f"Auto-continue in {self._step_countdown}s…",
+            font=ctk.CTkFont(size=11),
+            text_color=COLOR_TEXT_MUTED,
+        )
+        self._step_timer_label.pack(side="left", padx=(0, 10))
 
-        # Buttons
-        btn_row = ctk.CTkFrame(self._step_frame, fg_color="transparent")
-        btn_row.pack(padx=16, pady=(0, 10))
         ctk.CTkButton(
-            btn_row, text="▶  Next Step", fg_color="#6366f1",
-            hover_color="#4f46e5", command=self._on_step_continue,
-            font=ctk.CTkFont(size=12, weight="bold"), width=130, height=34,
-        ).pack(side="left", padx=4)
-        ctk.CTkButton(
-            btn_row, text="⏩  Run to End", fg_color="#475569",
-            hover_color="#334155", command=self._on_step_run_to_end,
-            font=ctk.CTkFont(size=12), width=130, height=34,
-        ).pack(side="left", padx=4)
+            row, text="Next →", fg_color=COLOR_ACCENT,
+            hover_color="#0284c7", command=self._on_step_continue,
+            font=ctk.CTkFont(size=11, weight="bold"), width=70, height=28,
+        ).pack(side="left")
 
-        self._log("warn", f"STEP PAUSED — {event.type}")
+        # Start countdown ticker
+        self._tick_step_countdown()
+
+    def _tick_step_countdown(self) -> None:
+        """Decrement countdown; auto-continue when it reaches 0."""
+        if not self._step_paused or not hasattr(self, "_step_frame"):
+            return
+        if not self._step_frame.winfo_exists():
+            return
+
+        self._step_countdown -= 1
+        if self._step_countdown <= 0:
+            self._on_step_continue()
+            return
+
+        self._step_timer_label.configure(
+            text=f"Auto-continue in {self._step_countdown}s…"
+        )
+        self._step_timer_id = self.after(1000, self._tick_step_countdown)
+
+    def _cancel_step_timer(self) -> None:
+        """Cancel the auto-continue countdown if active."""
+        if hasattr(self, "_step_timer_id"):
+            self.after_cancel(self._step_timer_id)
+            del self._step_timer_id
 
     def _on_step_continue(self) -> None:
         """Resume from step pause for one more event."""
+        self._cancel_step_timer()
         self._step_paused = False
         self._destroy_step_frame()
         self._set_status(STATUS_RUNNING)
         self._status_label.configure(text_color=COLOR_SUCCESS)
         self._start_polling()
 
-    def _on_step_run_to_end(self) -> None:
-        """Disable step mode and run to completion."""
-        self._step_mode = False
-        self._step_paused = False
-        self._step_mode_var.set(False)
-        self._destroy_step_frame()
-        self._set_status(STATUS_RUNNING)
-        self._status_label.configure(text_color=COLOR_SUCCESS)
-        self._log("info", "Step mode disabled — running to completion...")
-        self._start_polling()
 
     def _update_progress(self, delivered: int = -1, total: int = -1) -> None:
         """Update sim progress label. Call with no args to reset."""
@@ -877,7 +711,6 @@ class GBNLabApp(ctk.CTk):
         else:
             self._progress_label.configure(text=f"Progress: {delivered}/{total} packets")
 
-    # ── Replay controls ────────────────────────────────────────────────────
     #
     # Two layers work together:
     #   1. _replay_frames:  per-animation-tick canvas recordings (the visuals)
@@ -908,7 +741,6 @@ class GBNLabApp(ctk.CTk):
         # Show the final frame (last event → last animation frame)
         self._seek_to_event(last)
 
-    # ── Map event index ↔ animation frame index ──────────────────────
 
     def _event_to_frame_idx(self, event_idx: int) -> int:
         """Find the animation frame closest to the given event's recorded time."""
@@ -943,7 +775,6 @@ class GBNLabApp(ctk.CTk):
                 break
         return best
 
-    # ── Seek bar / stepping ──────────────────────────────────────────
 
     def _seek_to_event(self, event_idx: int) -> None:
         """Jump to the given event: load its snapshot + rebuild event log."""
@@ -1005,7 +836,6 @@ class GBNLabApp(ctk.CTk):
         if n > 0 and self._replay_event_idx < n - 1:
             self._seek_to_event(self._replay_event_idx + 1)
 
-    # ── Auto-play ─────────────────────────────────────────────────────
 
     def _on_replay_play(self) -> None:
         if self._replay_playing:
@@ -1186,13 +1016,11 @@ class GBNLabApp(ctk.CTk):
             self._active_flights.pop(pid, None)
         elif event.type == EventType.PACKET_CORRUPTED:
             self._log("err", f"Packet #{pid} CORRUPTED (target slot #{pid}) @ {event.time:.1f}ms")
-            self._show_sender_window_only()
             if pid in self._active_flights:
                 self._active_flights[pid]["result"] = "corrupt"
                 self._active_flights[pid]["failed_at"] = self._anim_frame
         elif event.type == EventType.PACKET_LOST:
             self._log("err", f"Packet #{pid} LOST     (target slot #{pid}) @ {event.time:.1f}ms")
-            self._show_sender_window_only()
             if pid in self._active_flights:
                 self._active_flights[pid]["result"] = "lost"
                 self._active_flights[pid]["failed_at"] = self._anim_frame
@@ -1217,18 +1045,15 @@ class GBNLabApp(ctk.CTk):
                 self._log("info", f"ACK #{ack} recv (dup — base already {new_base} > {ack}) @ {event.time:.1f}ms")
             else:
                 self._log("ok", f"ACK #{ack} recv → window slides to base={new_base} @ {event.time:.1f}ms")
-                self._show_sender_window_only()
             self._active_flights.pop(-ack - 1, None)
         elif event.type == EventType.ACK_CORRUPTED:
             self._log("err", f"ACK #{ack} CORRUPTED  @ {event.time:.1f}ms")
-            self._show_sender_window_only()
             ack_id = -ack - 1
             if ack_id in self._active_flights:
                 self._active_flights[ack_id]["result"] = "corrupt"
                 self._active_flights[ack_id]["failed_at"] = self._anim_frame
         elif event.type == EventType.ACK_LOST:
             self._log("err", f"ACK #{ack} LOST       @ {event.time:.1f}ms")
-            self._show_sender_window_only()
             ack_id = -ack - 1
             if ack_id in self._active_flights:
                 self._active_flights[ack_id]["result"] = "lost"
@@ -1240,33 +1065,7 @@ class GBNLabApp(ctk.CTk):
             n = meta.get("window_size", "?")
             self._log("warn", f"TIMEOUT #{pid} → RESEND WINDOW [{ws}..{we}] N={n} "
                                f"@ {event.time:.1f}ms")
-            self._show_sender_window_only()
             self._active_flights.pop(pid, None)
-
-    def _show_sender_window_only(self) -> None:
-        """Print minimal sender window state — only on terminal, during errors/timeouts."""
-        sn = self._last_snapshot
-        if not sn:
-            return
-        snd = sn.get("sender", {})
-        rcv = sn.get("receiver", {})
-        base = snd.get("base", "?")
-        nxt = snd.get("next_seq", "?")
-        win = snd.get("window", [])
-        win_size = snd.get("window_size", "?")
-        expected = rcv.get("expected", "?")
-        sent = snd.get("sent", [])
-        rw = snd.get("retransmitting_window")
-
-        if win:
-            ws, we = win[0], win[-1]
-            marker = ""
-            if rw:
-                marker = f" ⚡ RESEND [{rw[0]}..{rw[1]}]"
-            print(f"[TERM]   ╔══ SENDER [{ws}..{we}] N={win_size}  "
-                  f"base={base} next={nxt}{marker}")
-        print(f"[TERM]   ╚══ in_flight={sent if sent else '[]'}  "
-              f"│ RECEIVER expected={expected}")
 
     def _track_flight(self, pkt_id: int, direction: str, result: str) -> None:
         """Record a flight start so the canvas can animate it."""
@@ -1385,15 +1184,9 @@ class GBNLabApp(ctk.CTk):
         self._log("info", "Replay mode active — drag the seek bar or use ▶/◀ to step through events")
         self._show_replay_controls()
 
-    # ══════════════════════════════════════════════════════════════════════════
     # Event Log
-    # ══════════════════════════════════════════════════════════════════════════
 
     def _log(self, tag: str, text: str) -> None:
-        # Terminal echo for debugging
-        tag_marker = {"ok": "✓", "err": "✗", "warn": "⚠", "info": "·"}.get(tag, "")
-        print(f"[TERM] {tag_marker} {text}")
-
         self._log_text.configure(state="normal")
         ts = _time.strftime("%H:%M:%S")
         self._log_text.insert("end", f"[{ts}] ", "ts")
@@ -1401,9 +1194,7 @@ class GBNLabApp(ctk.CTk):
         self._log_text.see("end")
         self._log_text.configure(state="disabled")
 
-    # ══════════════════════════════════════════════════════════════════════════
     # Animation Canvas
-    # ══════════════════════════════════════════════════════════════════════════
 
     def _start_animation(self) -> None:
         """Start the canvas animation loop (call during simulation only)."""
@@ -1445,7 +1236,6 @@ class GBNLabApp(ctk.CTk):
             self._anim_id = self.after(ANIMATION_INTERVAL_MS, self._schedule_animation)
 
     def _redraw_canvas(self) -> None:
-        self._canvas.delete("all")
         w = self._canvas.winfo_width()
         h = self._canvas.winfo_height()
 
@@ -1453,6 +1243,15 @@ class GBNLabApp(ctk.CTk):
         if not snap:
             self._draw_placeholder()
             return
+
+        # Only recreate static items on resize; dynamic items tagged "dyn" every frame
+        new_size = (w, h)
+        needs_static = new_size != self._canvas_size
+        self._canvas_size = new_size
+        if needs_static:
+            self._canvas.delete("all")
+        else:
+            self._canvas.delete("dyn")
 
         margin_left = 40
         margin_right = 40
@@ -1480,15 +1279,7 @@ class GBNLabApp(ctk.CTk):
         gap = PACKET_SPACING
         slot_w = box + gap  # default slot width
 
-        # ══════════════════════════════════════════════════════════════════════
-        # Neon glow background (subtle)
-        # ══════════════════════════════════════════════════════════════════════
-        if self._neon:
-            self._draw_neon_background(w, h)
-
-        # ══════════════════════════════════════════════════════════════════════
         # UNIFIED GRID — compute shared slot width so sender & receiver align
-        # ══════════════════════════════════════════════════════════════════════
 
         win_end = min(base + win_size, total)
         swin_visible = min(win_size, total - base)
@@ -1511,25 +1302,29 @@ class GBNLabApp(ctk.CTk):
             shared_box = box
             shared_font = max(9, box // 3)
 
-        # ── Labels ──
-        self._canvas.create_text(margin_left, sender_y - 30,
-                                  text="SENDER", anchor="w",
-                                  fill=COLOR_ACCENT, font=("SF Mono", 15, "bold"))
-        self._canvas.create_text(margin_left, recv_y - 30,
-                                  text="RECEIVER", anchor="w",
-                                  fill=COLOR_SUCCESS, font=("SF Mono", 15, "bold"))
+        # === STATIC ELEMENTS (drawn once, only redrawn on resize) ===
 
-        # ── Channel line ──
-        ch_color = "#4f46e5" if self._neon else COLOR_BORDER
-        ch_width = 2 if self._neon else 1
-        self._canvas.create_line(0, mid_y, w, mid_y, fill=ch_color,
-                                  dash=(6, 4), width=ch_width)
-        self._canvas.create_text(w // 2, mid_y - 12, text="CHANNEL",
-                                  fill=COLOR_TEXT_MUTED, font=("SF Mono", 10))
+        if needs_static:
+            self._draw_neon_background(w, h)
 
-        # ══════════════════════════════════════════════════════════════════════
+        if needs_static:
+            self._canvas.create_text(margin_left, sender_y - 30,
+                                     text="SENDER", anchor="w",
+                                     fill=COLOR_ACCENT, font=("SF Mono", 15, "bold"))
+            self._canvas.create_text(margin_left, recv_y + shared_box + 24,
+                                     text="RECEIVER", anchor="w",
+                                     fill=COLOR_SUCCESS, font=("SF Mono", 15, "bold"))
+
+            ch_color = "#4f46e5"
+            ch_width = 2
+            self._canvas.create_line(0, mid_y, w, mid_y, fill=ch_color,
+                                     dash=(6, 4), width=ch_width)
+            self._canvas.create_text(w // 2, mid_y - 12, text="CHANNEL",
+                                     fill=COLOR_TEXT_MUTED, font=("SF Mono", 10))
+
+        # === DYNAMIC ELEMENTS (redrawn every frame) ===
+
         # SENDER WINDOW — aligned by ABSOLUTE packet ID (same grid as receiver)
-        # ══════════════════════════════════════════════════════════════════════
 
         # Store sender slot x-positions for flight targeting
         sender_slot_x: dict[int, float] = {}
@@ -1551,10 +1346,10 @@ class GBNLabApp(ctk.CTk):
                 color = COLOR_UNSENT
 
             self._draw_neon_box(x, sender_y, shared_box, color,
-                                text=str(pkt), font=("SF Mono", shared_font, "bold"))
+                                text=str(pkt), font=("SF Mono", shared_font, "bold"),
+                                tags="dyn")
             sender_slot_x[pkt] = x + shared_box / 2
 
-        # ── Window bracket (highlighted during retransmit) ──
         if swin_visible > 0:
             is_resending = rw is not None  # True while retransmit window is active
             # Pulse effect when resending: alternate between red and amber
@@ -1575,24 +1370,23 @@ class GBNLabApp(ctk.CTk):
             # Left bracket
             self._canvas.create_line(left_x - 5, sender_y - 12,
                                       left_x - 5, sender_y + shared_box + 12,
-                                      fill=bracket_color, width=bracket_w)
+                                      fill=bracket_color, width=bracket_w, tags="dyn")
             # Right bracket
             self._canvas.create_line(right_x + 5, sender_y - 12,
                                       right_x + 5, sender_y + shared_box + 12,
-                                      fill=bracket_color, width=bracket_w)
+                                      fill=bracket_color, width=bracket_w, tags="dyn")
             # Top bracket
             self._canvas.create_line(left_x - 5, sender_y - 12,
                                       right_x + 5, sender_y - 12,
-                                      fill=bracket_color, width=1)
+                                      fill=bracket_color, width=1, tags="dyn")
 
             label = f"N={win_size}"
             if is_resending:
                 label += f"  [RESEND {rw[0]}..{rw[1]}]"
             self._canvas.create_text((left_x + right_x) / 2, sender_y - 20,
                                       text=label, fill=bracket_color,
-                                      font=("SF Mono", 9, "bold"))
+                                      font=("SF Mono", 9, "bold"), tags="dyn")
 
-        # ── Sender trail: faint ghosts of ALL ACKed packets (0 .. base-1) ──
         for pkt in range(base):
             x = margin_left + pkt * shared_slot
             # Only draw what's on-screen; skip packets scrolled far left
@@ -1601,16 +1395,16 @@ class GBNLabApp(ctk.CTk):
             self._canvas.create_rectangle(
                 x, sender_y, x + shared_box, sender_y + shared_box,
                 fill=COLOR_ACKED, outline=COLOR_BORDER, width=1, stipple="gray50",
+                tags="dyn",
             )
             self._canvas.create_text(
                 x + shared_box / 2, sender_y + shared_box / 2,
                 text=str(pkt), fill=COLOR_TEXT_MUTED,
                 font=("SF Mono", shared_font, "bold"),
+                tags="dyn",
             )
 
-        # ══════════════════════════════════════════════════════════════════════
         # RECEIVER BUFFER — aligned by ABSOLUTE packet ID (same grid as sender)
-        # ══════════════════════════════════════════════════════════════════════
 
         # Store receiver slot x-positions for flight landing
         recv_slot_x: dict[int, float] = {}
@@ -1624,12 +1418,13 @@ class GBNLabApp(ctk.CTk):
                 self._canvas.create_rectangle(
                     x, recv_y, x + shared_box, recv_y + shared_box,
                     fill=COLOR_ACKED, outline=COLOR_BORDER, width=1,
-                    stipple="gray50",
+                    stipple="gray50", tags="dyn",
                 )
                 self._canvas.create_text(
                     x + shared_box / 2, recv_y + shared_box / 2,
                     text=str(pkt), fill=COLOR_TEXT_MUTED,
                     font=("SF Mono", shared_font, "bold"),
+                    tags="dyn",
                 )
                 recv_slot_x[pkt] = x + shared_box / 2
                 continue
@@ -1641,7 +1436,8 @@ class GBNLabApp(ctk.CTk):
                 color = COLOR_UNSENT
 
             self._draw_neon_box(x, recv_y, shared_box, color,
-                                text=str(pkt), font=("SF Mono", shared_font, "bold"))
+                                text=str(pkt), font=("SF Mono", shared_font, "bold"),
+                                tags="dyn")
             recv_slot_x[pkt] = x + shared_box / 2
 
         # Expected marker
@@ -1649,11 +1445,9 @@ class GBNLabApp(ctk.CTk):
             ex_x = recv_slot_x.get(expected, margin_left + expected * shared_slot + shared_box / 2)
             self._canvas.create_text(ex_x, recv_y - 14,
                                       text=f"Expected #{expected}", fill=COLOR_ACCENT,
-                                      font=("SF Mono", 9, "bold"))
+                                      font=("SF Mono", 9, "bold"), tags="dyn")
 
-        # ══════════════════════════════════════════════════════════════════════
         # FLYING PACKETS — X-interpolation from sender → receiver
-        # ══════════════════════════════════════════════════════════════════════
 
         if self._active_flights:
             dot_r = 7
@@ -1670,7 +1464,6 @@ class GBNLabApp(ctk.CTk):
                 result = flight.get("result", "ok")
                 is_failure = result in ("lost", "corrupt")
 
-                # ── Progress & cleanup ──
                 if is_failure:
                     progress = min(elapsed / flight_frames, fail_point)
                     failed_at = flight.get("failed_at", self._anim_frame)
@@ -1685,13 +1478,11 @@ class GBNLabApp(ctk.CTk):
                             del self._active_flights[flight_id]
                             continue
 
-                # ── Determine display packet ID ──
                 if flight_id < 0:
                     display_pkt = -flight_id - 1
                 else:
                     display_pkt = flight_id
 
-                # ── X interpolation: sender slot → receiver slot ──
                 # Start X: position on sender (relative to window base)
                 sender_col = display_pkt - base
                 if sender_col >= 0 and display_pkt in sender_slot_x:
@@ -1718,7 +1509,6 @@ class GBNLabApp(ctk.CTk):
                 # Clamp X to canvas bounds
                 x = max(margin_left + dot_r, min(x, w - margin_right - dot_r))
 
-                # ── Y position ──
                 top_y = sender_y + shared_box + dot_r
                 bot_y = recv_y - dot_r
 
@@ -1727,7 +1517,6 @@ class GBNLabApp(ctk.CTk):
                 else:
                     y = bot_y - ease * (bot_y - top_y)
 
-                # ── Stagger: prevent overlap at same position ──
                 grid_key = (int(x / (dot_r * 2)), int(y / (dot_r * 2)))
                 same_spot = occupied.get(grid_key, 0)
                 if same_spot > 0:
@@ -1737,7 +1526,6 @@ class GBNLabApp(ctk.CTk):
                     y += stagger_dy
                 occupied[grid_key] = same_spot + 1
 
-                # ── Color ──
                 if direction == "ack":
                     fill = COLOR_ERROR if is_failure else COLOR_ACCENT
                 elif is_failure:
@@ -1750,69 +1538,49 @@ class GBNLabApp(ctk.CTk):
                     }
                     fill = color_map.get(result, COLOR_ACCENT)
 
-                # ── Draw dot ──
                 self._canvas.create_oval(
                     x - dot_r, y - dot_r, x + dot_r, y + dot_r,
                     fill=fill, outline=COLOR_ERROR if is_failure else "",
-                    width=1.5 if is_failure else 0, tags="flight"
+                    width=1.5 if is_failure else 0, tags="dyn"
                 )
 
-                # ── Label ──
                 if is_failure:
                     self._canvas.create_text(
                         x, y, text="✗",
                         fill=COLOR_ERROR, font=("SF Mono", 12, "bold"),
-                        tags="flight"
+                        tags="dyn"
                     )
                 else:
                     label = f"#{display_pkt}" if flight_id >= 0 else f"ACK{display_pkt}"
                     self._canvas.create_text(
                         x, y + dot_r + 8, text=label,
-                        fill=fill, font=("SF Mono", 7), tags="flight"
+                        fill=fill, font=("SF Mono", 7), tags="dyn"
                     )
 
-                # ── Direction arrow ──
                 if is_failure and progress >= fail_point:
                     pass
                 elif direction in ("send", "resend"):
                     arrow_tip_y = y + dot_r
                     self._canvas.create_line(
                         x, y - dot_r, x, arrow_tip_y,
-                        fill=fill, width=1.5, tags="flight"
+                        fill=fill, width=1.5, tags="dyn"
                     )
                     self._canvas.create_polygon(
                         x - 3, arrow_tip_y - 4, x + 3, arrow_tip_y - 4, x, arrow_tip_y,
-                        fill=fill, outline="", tags="flight"
+                        fill=fill, outline="", tags="dyn"
                     )
                 else:
                     arrow_tip_y = y - dot_r
                     self._canvas.create_line(
                         x, y + dot_r, x, arrow_tip_y,
-                        fill=fill, width=1.5, tags="flight"
+                        fill=fill, width=1.5, tags="dyn"
                     )
                     self._canvas.create_polygon(
                         x - 3, arrow_tip_y + 4, x + 3, arrow_tip_y + 4, x, arrow_tip_y,
-                        fill=fill, outline="", tags="flight"
+                        fill=fill, outline="", tags="dyn"
                     )
 
-        # ══════════════════════════════════════════════════════════════════════
-        # STEP-MODE PAUSED BANNER
-        # ══════════════════════════════════════════════════════════════════════
-        if self._step_paused:
-            banner_y = mid_y
-            self._canvas.create_rectangle(
-                w / 2 - 140, banner_y - 18, w / 2 + 140, banner_y + 18,
-                fill=COLOR_BG_PANEL, outline=COLOR_WARNING, width=2, stipple="gray75",
-            )
-            self._canvas.create_text(
-                w / 2, banner_y,
-                text="⏸  STEP PAUSED — click Next Step to continue",
-                fill=COLOR_WARNING, font=("SF Mono", 11, "bold"),
-            )
-
-        # ══════════════════════════════════════════════════════════════════════
-        # FOOTER: info + legend
-        # ══════════════════════════════════════════════════════════════════════
+        # FOOTER: info (dynamic) + legend (static)
 
         delivered = snap.get("delivered", 0)
         sent_count = len(sent)
@@ -1821,20 +1589,21 @@ class GBNLabApp(ctk.CTk):
                                   text=f"Delivered: {delivered}/{total}  |  "
                                        f"Sent (unACKed): {sent_count}",
                                   anchor="w", fill=COLOR_TEXT_MUTED,
-                                  font=("SF Mono", 11))
+                                  font=("SF Mono", 11), tags="dyn")
 
-        lx = w - margin_right - 120
-        items = [
-            (COLOR_SENT, "Sent / UnACKed"),
-            (COLOR_ACKED, "ACKed / Received"),
-            (COLOR_TIMEOUT, "Timed out / Corrupt"),
-            (COLOR_UNSENT, "Not yet sent"),
-        ]
-        for i, (c, lbl) in enumerate(items):
-            y = footer_y + i * 18
-            self._canvas.create_rectangle(lx, y, lx + 12, y + 12, fill=c, outline="")
-            self._canvas.create_text(lx + 18, y + 6, text=lbl, anchor="w",
-                                      fill=COLOR_TEXT_MUTED, font=("SF Mono", 10))
+        if needs_static:
+            lx = w - margin_right - 120
+            items = [
+                (COLOR_SENT, "Sent / UnACKed"),
+                (COLOR_ACKED, "ACKed / Received"),
+                (COLOR_TIMEOUT, "Timed out / Corrupt"),
+                (COLOR_UNSENT, "Not yet sent"),
+            ]
+            for i, (c, lbl) in enumerate(items):
+                y = footer_y + i * 18
+                self._canvas.create_rectangle(lx, y, lx + 12, y + 12, fill=c, outline="")
+                self._canvas.create_text(lx + 18, y + 6, text=lbl, anchor="w",
+                                         fill=COLOR_TEXT_MUTED, font=("SF Mono", 10))
 
     def _draw_neon_background(self, w: int, h: int) -> None:
         """Subtle radial glow effect for neon mode."""
@@ -1848,24 +1617,18 @@ class GBNLabApp(ctk.CTk):
 
     def _draw_neon_box(self, x: float, y: float, size: float, fill: str,
                         outline: str = "", text: str = "", text_color: str = "",
-                        font=("SF Mono", 9, "bold"), pulse: bool = False) -> None:
-        """Draw a packet box with optional neon bright border."""
-        if self._neon:
-            # Bright border only — no noisy bubble halos
-            self._canvas.create_rectangle(
-                x, y, x + size, y + size,
-                fill=fill, outline="#a5b4fc", width=2,
-            )
-        else:
-            self._canvas.create_rectangle(
-                x, y, x + size, y + size,
-                fill=fill, outline=outline or COLOR_BORDER, width=1,
-            )
+                        font=("SF Mono", 9, "bold"), pulse: bool = False,
+                        tags: str = "") -> None:
+        """Draw a packet box with neon border."""
+        self._canvas.create_rectangle(
+            x, y, x + size, y + size,
+            fill=fill, outline="#a5b4fc", width=2, tags=tags,
+        )
         if text:
             self._canvas.create_text(
                 x + size / 2, y + size / 2,
                 text=text, fill=text_color or COLOR_TEXT,
-                font=font,
+                font=font, tags=tags,
             )
 
     def _draw_placeholder(self) -> None:
@@ -1878,14 +1641,13 @@ class GBNLabApp(ctk.CTk):
             self.after(200, self._draw_placeholder)  # retry later
             return
         self._canvas.delete("all")
+        self._canvas_size = (0, 0)  # force full redraw on next snapshot
         self._canvas.create_text(w // 2, h // 2,
                                   text="Click 'Start Simulation'\nto begin",
                                   fill=COLOR_TEXT_MUTED, font=("SF Mono", 14),
                                   justify="center")
 
-    # ══════════════════════════════════════════════════════════════════════════
     # Cleanup
-    # ══════════════════════════════════════════════════════════════════════════
 
     def _on_close(self) -> None:
         self._stop_polling()
