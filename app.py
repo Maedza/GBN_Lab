@@ -73,8 +73,14 @@ class GBNLabApp(ctk.CTk):
 
     def __init__(self):
         super().__init__()
-        self.title("Go-Back-N Protocol Simulator")
-        self.geometry("1280x760")
+        self.title("GBN Lab — E_force Software")
+
+        # 90 % of screen, centred
+        sw = self.winfo_screenwidth()
+        sh = self.winfo_screenheight()
+        w, h = int(sw * 0.9), int(sh * 0.9)
+        x, y = (sw - w) // 2, (sh - h) // 2
+        self.geometry(f"{w}x{h}+{x}+{y}")
         self.minsize(1000, 640)
         self.configure(fg_color=COLOR_BG)
 
@@ -142,9 +148,12 @@ class GBNLabApp(ctk.CTk):
         bar.pack(fill="x")
         bar.pack_propagate(False)
 
-        ctk.CTkLabel(bar, text="Go-Back-N ARQ Protocol Simulator",
+        ctk.CTkLabel(bar, text="GBN Lab",
                      font=ctk.CTkFont(size=16, weight="bold"),
                      text_color=COLOR_ACCENT).pack(side="left", padx=16, pady=10)
+        ctk.CTkLabel(bar, text="by E_force Software",
+                     font=ctk.CTkFont(size=10),
+                     text_color=COLOR_TEXT_MUTED).pack(side="left", padx=(4, 0), pady=10)
 
         self._status_dot = tk.Canvas(bar, width=14, height=14,
                                       bg=COLOR_BG, highlightthickness=0)

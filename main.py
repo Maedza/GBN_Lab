@@ -11,16 +11,22 @@ from splash import SplashScreen
 
 def main():
     app = GBNLabApp()
-    app.withdraw()  # hide main window until splash is done
-    SplashScreen(app)  # shows, animates, auto-destroys
 
-    # Show main window once splash closes
     def _show_app():
+        """Called by splash after fade-out completes."""
+        # Restore full opacity + bring to front
+        app.attributes("-alpha", 1.0)
         app.deiconify()
         app.lift()
         app.focus_force()
 
-    app.after(1800, _show_app)
+    # macOS Toplevel rendering quirk: a Toplevel parented to a withdrawn
+    # or unmapped parent window never appears.  Instead of withdraw(), we
+    # make the parent fully transparent — it stays mapped so the splash
+    # renders, but is invisible to the user.
+    app.attributes("-alpha", 0.0)
+    app.update_idletasks()  # force the window to map
+    splash = SplashScreen(app, on_done=_show_app)
     app.mainloop()
 
 
