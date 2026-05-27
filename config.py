@@ -5,7 +5,7 @@ Go-Back-N Protocol Simulator — Configuration & Constants.
 # ---- Default Simulation Parameters ----
 DEFAULT_WINDOW_SIZE = 4
 DEFAULT_BER = 0.0001          # Bit error rate (0.0 – 1.0)
-DEFAULT_PACKET_LOSS = 0.0     # Independent packet loss probability
+DEFAULT_PACKET_LOSS = 0.05    # Independent packet loss probability
 DEFAULT_NUM_PACKETS = 10      # Total data packets to send
 DEFAULT_TIMEOUT_MS = 300      # Timeout in milliseconds
 DEFAULT_PACKET_SIZE_BITS = 1000

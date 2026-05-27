@@ -19,7 +19,7 @@ import customtkinter as ctk
 import tkinter as tk
 
 from config import (
-    DEFAULT_WINDOW_SIZE, DEFAULT_BER, DEFAULT_NUM_PACKETS,
+    DEFAULT_WINDOW_SIZE, DEFAULT_BER, DEFAULT_PACKET_LOSS, DEFAULT_NUM_PACKETS,
     DEFAULT_TIMEOUT_MS, DEFAULT_PACKET_SIZE_BITS, DEFAULT_DATA_RATE_KBPS,
     DEFAULT_PROPAGATION_DELAY_MS, DEFAULT_SIM_SPEED,
     GUI_UPDATE_INTERVAL_MS, ANIMATION_INTERVAL_MS,
@@ -161,6 +161,8 @@ class GBNLabApp(ctk.CTk):
             panel, "Window Size (N)", DEFAULT_WINDOW_SIZE, 1, 10, 1)
         self._ber_slider, self._ber_val = self._slider(
             panel, "Bit Error Rate", DEFAULT_BER, 0.0, 0.01, 0.0001)
+        self._loss_slider, self._loss_val = self._slider(
+            panel, "Packet Loss", DEFAULT_PACKET_LOSS, 0.0, 0.5, 0.01)
         self._timeout_slider, self._timeout_val = self._slider(
             panel, "Timeout (ms)", DEFAULT_TIMEOUT_MS, 100, 2000, 50)
         self._packets_slider, self._packets_val = self._slider(
@@ -312,6 +314,7 @@ class GBNLabApp(ctk.CTk):
 
         window_size = int(self._window_slider.get())
         ber = round(self._ber_slider.get(), 4)
+        packet_loss = round(self._loss_slider.get(), 4)
         timeout_ms = int(self._timeout_slider.get())
         num_packets = int(self._packets_slider.get())
         sim_speed = round(self._speed_slider.get(), 1)
@@ -319,6 +322,7 @@ class GBNLabApp(ctk.CTk):
         self._sim = GBNSimulation(
             window_size=window_size,
             ber=ber,
+            packet_loss=packet_loss,
             timeout_ms=timeout_ms,
             num_packets=num_packets,
             packet_size_bits=DEFAULT_PACKET_SIZE_BITS,
@@ -329,7 +333,7 @@ class GBNLabApp(ctk.CTk):
 
         # Log initial info BEFORE starting the sim so it appears first
         self._log("info", f"Go-Back-N |  N={window_size}  BER={ber:.4f}  "
-                  f"pkts={num_packets}  timeout={timeout_ms}ms")
+                  f"loss={packet_loss:.0%}  pkts={num_packets}  timeout={timeout_ms}ms")
 
         self._sim.start()
         self._set_status(STATUS_RUNNING)
