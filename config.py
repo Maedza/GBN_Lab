@@ -11,7 +11,7 @@ DEFAULT_TIMEOUT_MS = 300      # Timeout in milliseconds
 DEFAULT_PACKET_SIZE_BITS = 1000
 DEFAULT_DATA_RATE_KBPS = 100  # Channel data rate in kbps
 DEFAULT_PROPAGATION_DELAY_MS = 10
-DEFAULT_SIM_SPEED = 0.5       # Animation speed (0.1 = slow, 0.5 = readable, 1.0 = fast)
+DEFAULT_SIM_SPEED = 0.2       # Animation speed (0.1 = slow, 0.5 = readable, 1.0 = fast)
 
 # ---- Simulation Engine ----
 GUI_UPDATE_INTERVAL_MS = 50   # milliseconds between GUI polls
@@ -45,3 +45,25 @@ COLOR_TIMEOUT = COLOR_ERROR  # timed out / corrupted
 STATUS_IDLE = "Idle"
 STATUS_RUNNING = "Running"
 STATUS_COMPLETE = "Complete"
+
+# ---- Scenario Presets ----
+SCENARIO_PRESETS = {
+    "Low Errors": {
+        "window_size": 4, "ber": 0.0001, "packet_loss": 0.01,
+        "timeout_ms": 300, "num_packets": 10,
+    },
+    "Moderate Noise": {
+        "window_size": 4, "ber": 0.001, "packet_loss": 0.03,
+        "timeout_ms": 300, "num_packets": 10,
+    },
+    "High BER Nightmare": {
+        "window_size": 4, "ber": 0.008, "packet_loss": 0.05,
+        "timeout_ms": 200, "num_packets": 10,
+    },
+    "Packet Loss Hell": {
+        "window_size": 4, "ber": 0.0005, "packet_loss": 0.20,
+        "timeout_ms": 250, "num_packets": 10,
+    },
+}
+
+DEFAULT_SCENARIO = "Low Errors"
