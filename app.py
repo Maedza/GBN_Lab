@@ -754,42 +754,42 @@ class GBNLabApp(ctk.CTk):
 
     _EXPLANATIONS = {
         EventType.PACKET_SENT:
-            "The sender transmits this packet. GBN allows up to N\n"
-            "packets in flight without waiting for individual ACKs.\n"
-            "A single timer tracks the oldest unACKed packet.",
+            "Packet pushed onto the wire.\n"
+            "GBN sends up to N packets back-to-back without waiting.\n"
+            "One timer guards the oldest packet still in flight.",
         EventType.PACKET_RECEIVED:
-            "The receiver gets this packet. If it's the next expected\n"
-            "one, it's accepted and a cumulative ACK is sent.\n"
-            "The ACK means 'I've received everything up to this point.'",
+            "Packet arrived at the receiver.\n"
+            "If it's the next one in sequence → keep it, send ACK.\n"
+            "ACK says: 'got everything up to this point.'",
         EventType.PACKET_CORRUPTED:
-            "Bit errors from the noisy channel corrupted this packet.\n"
-            "The receiver detects the error and discards it.\n"
-            "A duplicate ACK may be sent to signal the sender.",
+            "Packet arrived but bits flipped in transit.\n"
+            "Receiver tosses it. Same as never arriving.\n"
+            "Sender won't know until the timer runs out.",
         EventType.PACKET_LOST:
-            "The packet was lost entirely — never reached the receiver.\n"
-            "GBN relies on timeouts to detect losses.\n"
-            "When the timer fires, the entire window is retransmitted.",
+            "Packet never reached the receiver — gone.\n"
+            "No ACK will come back. The timer will expire,\n"
+            "then the whole unsent window gets re-fired.",
         EventType.ACK_SENT:
-            "The receiver sends back a cumulative ACK.\n"
-            "In GBN, ACK(N) acknowledges ALL packets up to N.\n"
-            "This is more efficient than individual ACKs.",
+            "Receiver sends ACK(N): 'I have packets 0 through N.'\n"
+            "This one ACK covers every earlier packet too.\n"
+            "Cumulative — one ACK, not one per packet.",
         EventType.ACK_RECEIVED:
-            "The sender receives the cumulative ACK.\n"
-            "The window slides forward — new packets can now be sent.\n"
-            "The timer is reset for the new oldest unACKed packet.",
+            "Sender gets the ACK. Window slides forward.\n"
+            "Now there's room to push fresh packets onto the wire.\n"
+            "Timer resets to the new oldest unACKed packet.",
         EventType.ACK_CORRUPTED:
-            "The ACK was corrupted by channel noise.\n"
-            "The sender ignores corrupted ACKs.\n"
-            "Eventually, the timer will fire and trigger retransmission.",
+            "ACK arrived garbled — sender ignores it.\n"
+            "No sliding, no new packets sent.\n"
+            "Timer still ticking. It'll retry when it fires.",
         EventType.ACK_LOST:
-            "The ACK was lost in transmission.\n"
-            "From the sender's perspective, this is identical to\n"
-            "a corrupted ACK — the timer will handle recovery.",
+            "ACK never made it back.\n"
+            "Looks exactly like a corrupted ACK to the sender.\n"
+            "Same outcome: wait for timeout, then resend window.",
         EventType.TIMEOUT:
-            "The timer for the oldest unACKed packet expired.\n"
-            "This is GBN's key mechanism: the entire window from\n"
-            "base to next_seq-1 is retransmitted. All packets\n"
-            "arriving out of order at the receiver are discarded.",
+            "Timer fired — oldest packet was never ACKed.\n"
+            "This is GBN's recovery: the full window [base .. next-1]\n"
+            "gets retransmitted. Anything out-of-order at the receiver\n"
+            "is thrown away — only in-order packets count.",
     }
 
     def _destroy_step_frame(self) -> None:
