@@ -243,7 +243,7 @@ class GBNLabApp(ctk.CTk):
 
         header = ctk.CTkFrame(log_frame, fg_color="transparent", height=26)
         header.grid(row=0, column=0, sticky="ew", padx=8, pady=(4, 0))
-        ctk.CTkLabel(header, text="Event Log", font=ctk.CTkFont(size=11, weight="bold"),
+        ctk.CTkLabel(header, text="Event Log", font=ctk.CTkFont(size=13, weight="bold"),
                      text_color=COLOR_TEXT_MUTED).pack(side="left")
 
         self._log_text = tk.Text(log_frame, bg="#0f172a", fg=COLOR_TEXT,
