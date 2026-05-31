@@ -32,6 +32,10 @@ from config import (
     SCENARIO_PRESETS, DEFAULT_SCENARIO,
     MONO_FONT,
 )
+
+# Safety caps to prevent unbounded memory growth
+MAX_REPLAY_FRAMES = 2000  # ~160 s of animation at 80 ms/tick
+MAX_LOG_TEXT_LINES = 500  # trim tk.Text widget beyond this
 from simulation import GBNSimulation, EventType
 
 
@@ -1214,6 +1218,11 @@ class GBNLabApp(ctk.CTk):
         self._log_text.insert("end", f"[{ts}] ", "ts")
         self._log_text.insert("end", text + "\n", tag)
         self._log_text.see("end")
+        # Trim old lines to prevent unbounded widget growth
+        line_count = int(self._log_text.index("end-1c").split(".")[0])
+        if line_count > MAX_LOG_TEXT_LINES:
+            excess = line_count - MAX_LOG_TEXT_LINES
+            self._log_text.delete("1.0", f"{excess + 1}.0")
         self._log_text.configure(state="disabled")
 
     # Animation Canvas
@@ -1245,13 +1254,14 @@ class GBNLabApp(ctk.CTk):
             # Play back pre-recorded animation frames
             self._playback_animation_frame()
         else:
-            # Live simulation — record this frame
+            # Live simulation — record this frame (capped)
             if self._replay_capturing:
-                self._replay_frames.append({
-                    "anim_frame": self._anim_frame,
-                    "snapshot": dict(self._last_snapshot) if self._last_snapshot else {},
-                    "flights": {k: dict(v) for k, v in self._active_flights.items()},
-                })
+                if len(self._replay_frames) < MAX_REPLAY_FRAMES:
+                    self._replay_frames.append({
+                        "anim_frame": self._anim_frame,
+                        "snapshot": dict(self._last_snapshot) if self._last_snapshot else {},
+                        "flights": {k: dict(v) for k, v in self._active_flights.items()},
+                    })
             self._redraw_canvas()
 
         if self._anim_active:
