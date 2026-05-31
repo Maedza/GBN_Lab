@@ -51,7 +51,7 @@ class MetricCard(ctk.CTkFrame):
         ctk.CTkLabel(self, text=title, font=ctk.CTkFont(size=11),
                      text_color=COLOR_TEXT_MUTED).pack(anchor="w", padx=12, pady=(8, 0))
         self._value = ctk.CTkLabel(self, text="--", font=ctk.CTkFont(size=24, weight="bold"),
-                                    text_color=COLOR_ACCENT)
+                                   text_color=COLOR_ACCENT)
         self._value.pack(anchor="w", padx=12)
         if unit:
             ctk.CTkLabel(self, text=unit, font=ctk.CTkFont(size=9),
@@ -98,7 +98,8 @@ class GBNLabApp(ctk.CTk):
         #  _replay_events: per-event log (for the timeline seek bar + event log)
         #  _replay_frames: per-animation-tick visual state (for exact canvas playback)
         self._replay_events: list[dict] = []
-        self._replay_frames: list[dict] = []            # animation-level recording
+        # animation-level recording
+        self._replay_frames: list[dict] = []
         self._replay_capturing: bool = False             # True during live simulation
         self._replay_mode: bool = False                  # True when showing replay UI
         self._replay_event_idx: int = 0                  # current event in seek bar
@@ -107,9 +108,11 @@ class GBNLabApp(ctk.CTk):
         self._replay_id: Optional[str] = None
 
         # Flying packet animation state
-        self._active_flights: dict[int, dict] = {}   # pkt_id -> {start_frame, direction, result, failed_at?}
+        # pkt_id -> {start_frame, direction, result, failed_at?}
+        self._active_flights: dict[int, dict] = {}
         self._FLIGHT_FRAMES = 6                       # animation frames per flight hop
-        self._FAIL_POINT = 0.65                       # where failed packets stop mid-flight
+        # where failed packets stop mid-flight
+        self._FAIL_POINT = 0.65
         self._FAIL_DISPLAY_FRAMES = 10                # frames to show X before removing
 
         # Scenario context (set by dropdown)
@@ -119,7 +122,8 @@ class GBNLabApp(ctk.CTk):
         self._step_mode = False
         self._step_paused = False
         self._last_paused_anomaly = None  # skip consecutive same-type pauses
-        self._canvas_size = (0, 0)  # track resize to avoid redrawing static items
+        # track resize to avoid redrawing static items
+        self._canvas_size = (0, 0)
         self._sim_speed_replay = DEFAULT_SIM_SPEED  # stored for replay pacing
 
         self._build_ui()
@@ -153,12 +157,13 @@ class GBNLabApp(ctk.CTk):
                      text_color=COLOR_TEXT_MUTED).pack(side="left", padx=(4, 0), pady=10)
 
         self._status_dot = tk.Canvas(bar, width=14, height=14,
-                                      bg=COLOR_BG, highlightthickness=0)
+                                     bg=COLOR_BG, highlightthickness=0)
         self._status_dot.pack(side="right", padx=(0, 6), pady=10)
-        self._dot = self._status_dot.create_oval(2, 2, 12, 12, fill="#475569", outline="")
+        self._dot = self._status_dot.create_oval(
+            2, 2, 12, 12, fill="#475569", outline="")
 
         self._status_label = ctk.CTkLabel(bar, text="Idle", font=ctk.CTkFont(size=13),
-                                           text_color=COLOR_TEXT_MUTED)
+                                          text_color=COLOR_TEXT_MUTED)
         self._status_label.pack(side="right", pady=10)
 
         # Separator
@@ -176,7 +181,6 @@ class GBNLabApp(ctk.CTk):
         self._build_controls(body)
         self._build_center(body)
         self._build_metrics_panel(body)
-
 
     def _build_controls(self, parent) -> None:
         panel = ctk.CTkFrame(parent, fg_color=COLOR_BG_PANEL, corner_radius=0)
@@ -207,7 +211,7 @@ class GBNLabApp(ctk.CTk):
             panel, "Packet Loss", DEFAULT_PACKET_LOSS, 0.0, 0.5, 0.01)
         # Timeout is always auto (adaptive 3× RTT) — no slider needed
         self._packets_slider, self._packets_val = self._slider(
-            panel, "Packets to Send", DEFAULT_NUM_PACKETS, 1, 20, 1)
+            panel, "Packets to Send", DEFAULT_NUM_PACKETS, 1, 19, 1)
         self._speed_slider, self._speed_val = self._slider(
             panel, "Simulation Speed", DEFAULT_SIM_SPEED, 0.1, 2.0, 0.1)
         # Fix speed display to show 1 decimal
@@ -241,7 +245,8 @@ class GBNLabApp(ctk.CTk):
                      ).pack(padx=28, pady=(0, 6), anchor="w")
 
         # Buttons
-        btn_opts = {"width": 210, "height": 36, "font": ctk.CTkFont(size=13, weight="bold")}
+        btn_opts = {"width": 210, "height": 36,
+                    "font": ctk.CTkFont(size=13, weight="bold")}
 
         self._start_btn = ctk.CTkButton(
             panel, text="Start Simulation", fg_color="#166534",
@@ -263,7 +268,7 @@ class GBNLabApp(ctk.CTk):
         row.pack_propagate(False)
 
         val_lbl = ctk.CTkLabel(row, text=str(default), width=50,
-                                font=ctk.CTkFont(size=11), text_color=COLOR_TEXT)
+                               font=ctk.CTkFont(size=11), text_color=COLOR_TEXT)
         val_lbl.pack(side="right")
 
         var = ctk.DoubleVar(value=default)
@@ -277,7 +282,6 @@ class GBNLabApp(ctk.CTk):
                           height=14)
         s.pack(side="left", fill="x", expand=True, padx=(0, 8))
         return s, val_lbl
-
 
     def _build_center(self, parent) -> None:
         center = ctk.CTkFrame(parent, fg_color="transparent")
@@ -298,7 +302,7 @@ class GBNLabApp(ctk.CTk):
         scrub_frame.grid_propagate(False)
 
         self._sim_progress_frame = ctk.CTkFrame(scrub_frame, fg_color="transparent",
-                                                 height=34)
+                                                height=34)
         self._sim_progress_frame.pack(fill="x", expand=True)
 
         self._progress_label = ctk.CTkLabel(
@@ -316,7 +320,8 @@ class GBNLabApp(ctk.CTk):
             command=self._on_replay_seek,
             progress_color=COLOR_ACCENT, button_color=COLOR_ACCENT, height=14,
         )
-        self._replay_slider.pack(side="left", fill="x", expand=True, padx=(8, 6))
+        self._replay_slider.pack(
+            side="left", fill="x", expand=True, padx=(8, 6))
 
         self._replay_step_back_btn = ctk.CTkButton(
             self._replay_frame, text="◀", width=28, height=26,
@@ -343,10 +348,12 @@ class GBNLabApp(ctk.CTk):
             self._replay_frame, text="  0/0", font=ctk.CTkFont(size=10),
             text_color=COLOR_TEXT_MUTED, width=380, anchor="w",
         )
-        self._replay_pos_label.pack(side="right", padx=(0, 8), fill="x", expand=True)
+        self._replay_pos_label.pack(
+            side="right", padx=(0, 8), fill="x", expand=True)
 
         # Event log
-        log_frame = ctk.CTkFrame(center, fg_color=COLOR_BG_PANEL, corner_radius=8)
+        log_frame = ctk.CTkFrame(
+            center, fg_color=COLOR_BG_PANEL, corner_radius=8)
         log_frame.grid(row=2, column=0, sticky="nsew")
         log_frame.grid_rowconfigure(0, weight=1)
         log_frame.grid_columnconfigure(0, weight=1)
@@ -357,11 +364,12 @@ class GBNLabApp(ctk.CTk):
                      text_color=COLOR_TEXT_MUTED).pack(side="left")
 
         self._log_text = tk.Text(log_frame, bg="#0f172a", fg=COLOR_TEXT,
-                                  font=(MONO_FONT, 11), wrap="word",
-                                  bd=0, padx=8, pady=4,
-                                  insertbackground=COLOR_ACCENT,
-                                  highlightthickness=0, state="disabled")
-        self._log_text.grid(row=1, column=0, sticky="nsew", padx=6, pady=(2, 6))
+                                 font=(MONO_FONT, 11), wrap="word",
+                                 bd=0, padx=8, pady=4,
+                                 insertbackground=COLOR_ACCENT,
+                                 highlightthickness=0, state="disabled")
+        self._log_text.grid(row=1, column=0, sticky="nsew",
+                            padx=6, pady=(2, 6))
 
         # Color tags
         self._log_text.tag_configure("ok", foreground=COLOR_SUCCESS)
@@ -369,8 +377,7 @@ class GBNLabApp(ctk.CTk):
         self._log_text.tag_configure("warn", foreground=COLOR_WARNING)
         self._log_text.tag_configure("info", foreground=COLOR_ACCENT)
         self._log_text.tag_configure("ts", foreground=COLOR_TEXT_MUTED,
-                                      font=(MONO_FONT, 10))
-
+                                     font=(MONO_FONT, 10))
 
     def _build_metrics_panel(self, parent) -> None:
         panel = ctk.CTkFrame(parent, fg_color=COLOR_BG_PANEL, corner_radius=0)
@@ -395,8 +402,8 @@ class GBNLabApp(ctk.CTk):
         ctk.CTkLabel(panel, text="Channel Stats", font=ctk.CTkFont(size=12, weight="bold"),
                      text_color=COLOR_TEXT_MUTED).pack(padx=14, pady=(14, 4), anchor="w")
         self._chan_label = ctk.CTkLabel(panel, text="Lost: --  Corrupted: --",
-                                         font=ctk.CTkFont(size=12),
-                                         text_color=COLOR_TEXT_MUTED)
+                                        font=ctk.CTkFont(size=12),
+                                        text_color=COLOR_TEXT_MUTED)
         self._chan_label.pack(padx=14, anchor="w")
 
     # Status
@@ -478,10 +485,12 @@ class GBNLabApp(ctk.CTk):
         self._set_status(STATUS_RUNNING)
 
         if self._step_mode:
-            self._start_btn.configure(text="Running (Step)...", fg_color="#475569", state="disabled")
+            self._start_btn.configure(
+                text="Running (Step)...", fg_color="#475569", state="disabled")
             self._step_paused = False
         else:
-            self._start_btn.configure(text="Running...", fg_color="#475569", state="disabled")
+            self._start_btn.configure(
+                text="Running...", fg_color="#475569", state="disabled")
 
         self._completed = False
 
@@ -495,7 +504,6 @@ class GBNLabApp(ctk.CTk):
 
         # Start animation (only during simulation)
         self._start_animation()
-
 
     def _on_reset(self) -> None:
         if self._sim:
@@ -520,10 +528,12 @@ class GBNLabApp(ctk.CTk):
         self._replay_frame.pack_forget()
         self._sim_progress_frame.pack(fill="x", expand=True)
         # Keep log history across runs — add a separator if there was content
-        log_already_has_content = self._log_text.get("1.0", "end-1c").strip() != ""
+        log_already_has_content = self._log_text.get(
+            "1.0", "end-1c").strip() != ""
         self._log_text.configure(state="normal")
         if log_already_has_content:
-            self._log_text.insert("end", "\n" + "─" * 50 + " NEW RUN " + "─" * 50 + "\n\n", "info")
+            self._log_text.insert("end", "\n" + "─" *
+                                  50 + " NEW RUN " + "─" * 50 + "\n\n", "info")
         self._log_text.configure(state="disabled")
         self._events.clear()
         self._replay_events.clear()
@@ -612,7 +622,6 @@ class GBNLabApp(ctk.CTk):
                 self._destroy_step_frame()
                 self._on_done(self._sim.metrics)
 
-
     # Event types skipped by step mode (routine, non-anomaly events)
     _SKIP_EVENTS = {EventType.PACKET_SENT, EventType.PACKET_RECEIVED,
                     EventType.ACK_SENT, EventType.ACK_RECEIVED}
@@ -696,13 +705,13 @@ class GBNLabApp(ctk.CTk):
         self._status_label.configure(text_color=COLOR_SUCCESS)
         self._start_polling()
 
-
     def _update_progress(self, delivered: int = -1, total: int = -1) -> None:
         """Update sim progress label. Call with no args to reset."""
         if delivered < 0 or total <= 0:
             self._progress_label.configure(text="Progress: --/--")
         else:
-            self._progress_label.configure(text=f"Progress: {delivered}/{total} packets")
+            self._progress_label.configure(
+                text=f"Progress: {delivered}/{total} packets")
 
     #
     # Two layers work together:
@@ -720,7 +729,8 @@ class GBNLabApp(ctk.CTk):
         self._replay_mode = True
         self._sim_progress_frame.pack_forget()
         n_events = max(len(self._replay_events), 1)
-        self._replay_slider.configure(to=n_events - 1, number_of_steps=n_events)
+        self._replay_slider.configure(
+            to=n_events - 1, number_of_steps=n_events)
         last = n_events - 1
         self._replay_slider_var.set(last)
         self._replay_pos_label.configure(text=f"  {last}/{last}")
@@ -733,7 +743,6 @@ class GBNLabApp(ctk.CTk):
         self._anim_frame = 0
         # Show the final frame (last event → last animation frame)
         self._seek_to_event(last)
-
 
     def _event_to_frame_idx(self, event_idx: int) -> int:
         """Find the animation frame closest to the given event's recorded time."""
@@ -768,7 +777,6 @@ class GBNLabApp(ctk.CTk):
                 break
         return best
 
-
     def _seek_to_event(self, event_idx: int) -> None:
         """Jump to the given event: load its snapshot + rebuild event log."""
         n_events = len(self._replay_events)
@@ -782,7 +790,8 @@ class GBNLabApp(ctk.CTk):
         self._replay_frame_idx = frame_idx
 
         if self._replay_frames:
-            f = self._replay_frames[min(frame_idx, len(self._replay_frames) - 1)]
+            f = self._replay_frames[min(
+                frame_idx, len(self._replay_frames) - 1)]
             self._last_snapshot = f["snapshot"]
             # Clone flights so rendering uses current _anim_frame for progress
             self._active_flights.clear()
@@ -792,7 +801,8 @@ class GBNLabApp(ctk.CTk):
             # so they look like they just started (seek loads a still frame)
             frame_anim = f.get("anim_frame", frame_idx)
             for flight in self._active_flights.values():
-                flight["start_frame"] = self._anim_frame - (frame_anim - flight.get("start_frame", 0))
+                flight["start_frame"] = self._anim_frame - \
+                    (frame_anim - flight.get("start_frame", 0))
 
         self._redraw_canvas()
 
@@ -809,7 +819,8 @@ class GBNLabApp(ctk.CTk):
         desc = self._describe_replay_event(
             ev["event_type"], ev.get("event_packet_id", -1),
             ev.get("event_ack_id", -1), ev.get("event_time", 0))
-        self._replay_pos_label.configure(text=f"  {event_idx}/{n_events - 1}  {desc}")
+        self._replay_pos_label.configure(
+            text=f"  {event_idx}/{n_events - 1}  {desc}")
 
     def _on_replay_seek(self, value: float) -> None:
         if self._replay_playing:
@@ -829,7 +840,6 @@ class GBNLabApp(ctk.CTk):
         if n > 0 and self._replay_event_idx < n - 1:
             self._seek_to_event(self._replay_event_idx + 1)
 
-
     def _on_replay_play(self) -> None:
         if self._replay_playing:
             self._stop_replay_auto()
@@ -840,7 +850,7 @@ class GBNLabApp(ctk.CTk):
         """Begin playing back recorded animation frames."""
         self._replay_playing = True
         self._replay_play_btn.configure(text="⏸", fg_color=COLOR_WARNING,
-                                         hover_color="#ca8a04")
+                                        hover_color="#ca8a04")
         # Start the shared animation loop — it switches to playback mode
         self._start_animation()
 
@@ -849,15 +859,15 @@ class GBNLabApp(ctk.CTk):
         self._replay_playing = False
         self._stop_animation()
         self._replay_play_btn.configure(text="▶", fg_color=COLOR_ACCENT,
-                                         hover_color="#4f46e5")
+                                        hover_color="#4f46e5")
 
     def _playback_animation_frame(self) -> None:
         """Load the next pre-recorded animation frame and redraw.
-        
+
         Called from _schedule_animation() when _replay_mode is True.
         Plays frames at the same ANIMATION_INTERVAL_MS rate they were recorded at,
         guaranteeing identical visual output to the live simulation.
-        
+
         Flight start_frame values from the recording are adjusted to sync with
         the playback _anim_frame so elapsed time (and thus flight positions) match.
         """
@@ -886,7 +896,8 @@ class GBNLabApp(ctk.CTk):
             # In playback: elapsed = _anim_frame - new_start
             # So: new_start = _anim_frame - (recorded_anim - original_start)
             original_start = fc.get("start_frame", recorded_anim)
-            fc["start_frame"] = self._anim_frame - (recorded_anim - original_start)
+            fc["start_frame"] = self._anim_frame - \
+                (recorded_anim - original_start)
             self._active_flights[fid] = fc
 
         self._redraw_canvas()
@@ -907,7 +918,8 @@ class GBNLabApp(ctk.CTk):
                 ev["event_type"], ev.get("event_packet_id", -1),
                 ev.get("event_ack_id", -1), ev.get("event_time", 0))
             n_events = len(self._replay_events)
-            self._replay_pos_label.configure(text=f"  {ev_idx}/{n_events - 1}  {desc}")
+            self._replay_pos_label.configure(
+                text=f"  {ev_idx}/{n_events - 1}  {desc}")
 
     def _log_replay_event(self, event: dict) -> None:
         """Log a replay event to the event log mirroring live-sim format."""
@@ -922,20 +934,26 @@ class GBNLabApp(ctk.CTk):
         elif etype == "PACKET_RECEIVED":
             accepted = meta.get("accepted", True)
             if accepted:
-                self._log("ok", f"Recv packet #{pid} → slot #{pid} @ {t:.1f}ms")
+                self._log(
+                    "ok", f"Recv packet #{pid} → slot #{pid} @ {t:.1f}ms")
             else:
                 exp = meta.get("expected", "?")
-                self._log("warn", f"DISCARD #{pid} (out-of-order, expected #{exp}) @ {t:.1f}ms")
+                self._log(
+                    "warn", f"DISCARD #{pid} (out-of-order, expected #{exp}) @ {t:.1f}ms")
         elif etype == "PACKET_CORRUPTED":
-            self._log("err", f"Packet #{pid} CORRUPTED (target slot #{pid}) @ {t:.1f}ms")
+            self._log(
+                "err", f"Packet #{pid} CORRUPTED (target slot #{pid}) @ {t:.1f}ms")
         elif etype == "PACKET_LOST":
-            self._log("err", f"Packet #{pid} LOST     (target slot #{pid}) @ {t:.1f}ms")
+            self._log(
+                "err", f"Packet #{pid} LOST     (target slot #{pid}) @ {t:.1f}ms")
         elif etype == "ACK_SENT":
             triggered_by_accept = meta.get("from_accept", True)
             if triggered_by_accept:
-                self._log("ok", f"ACK #{ack} ← recv (cumulative 0..{ack}) @ {t:.1f}ms")
+                self._log(
+                    "ok", f"ACK #{ack} ← recv (cumulative 0..{ack}) @ {t:.1f}ms")
             else:
-                self._log("info", f"ACK #{ack} ← recv (repeat, out-of-order) @ {t:.1f}ms")
+                self._log(
+                    "info", f"ACK #{ack} ← recv (repeat, out-of-order) @ {t:.1f}ms")
         elif etype == "ACK_RECEIVED":
             if meta.get("is_duplicate"):
                 self._log("info", f"ACK #{ack} recv (duplicate) @ {t:.1f}ms")
@@ -950,7 +968,7 @@ class GBNLabApp(ctk.CTk):
             we = meta.get("window_end", "?")
             n_val = meta.get("window_size", "?")
             self._log("warn", f"TIMEOUT #{pid} → RESEND WINDOW [{ws}..{we}] N={n_val} "
-                               f"@ {t:.1f}ms")
+                      f"@ {t:.1f}ms")
         elif etype == "DONE":
             d = meta.get("delivered", "?")
             ts = meta.get("total_sent", "?")
@@ -1002,18 +1020,22 @@ class GBNLabApp(ctk.CTk):
             meta = getattr(event, "meta", {}) or {}
             accepted = meta.get("accepted", True)
             if accepted:
-                self._log("ok", f"Recv packet #{pid} → slot #{pid} @ {event.time:.1f}ms")
+                self._log(
+                    "ok", f"Recv packet #{pid} → slot #{pid} @ {event.time:.1f}ms")
             else:
                 exp = meta.get("expected", "?")
-                self._log("warn", f"DISCARD #{pid} (out-of-order, expected #{exp}) @ {event.time:.1f}ms")
+                self._log(
+                    "warn", f"DISCARD #{pid} (out-of-order, expected #{exp}) @ {event.time:.1f}ms")
             self._active_flights.pop(pid, None)
         elif event.type == EventType.PACKET_CORRUPTED:
-            self._log("err", f"Packet #{pid} CORRUPTED (target slot #{pid}) @ {event.time:.1f}ms")
+            self._log(
+                "err", f"Packet #{pid} CORRUPTED (target slot #{pid}) @ {event.time:.1f}ms")
             if pid in self._active_flights:
                 self._active_flights[pid]["result"] = "corrupt"
                 self._active_flights[pid]["failed_at"] = self._anim_frame
         elif event.type == EventType.PACKET_LOST:
-            self._log("err", f"Packet #{pid} LOST     (target slot #{pid}) @ {event.time:.1f}ms")
+            self._log(
+                "err", f"Packet #{pid} LOST     (target slot #{pid}) @ {event.time:.1f}ms")
             if pid in self._active_flights:
                 self._active_flights[pid]["result"] = "lost"
                 self._active_flights[pid]["failed_at"] = self._anim_frame
@@ -1023,11 +1045,13 @@ class GBNLabApp(ctk.CTk):
             meta = getattr(event, "meta", {}) or {}
             triggered_by_accept = meta.get("from_accept", True)
             if triggered_by_accept:
-                self._log("ok", f"ACK #{ack} ← recv (cumulative 0..{ack}) @ {event.time:.1f}ms")
+                self._log(
+                    "ok", f"ACK #{ack} ← recv (cumulative 0..{ack}) @ {event.time:.1f}ms")
             else:
                 sn = self._last_snapshot
                 exp = sn.get("receiver", {}).get("expected", "?")
-                self._log("info", f"ACK #{ack} ← recv (repeat 0..{ack}, still waiting #{exp}) @ {event.time:.1f}ms")
+                self._log(
+                    "info", f"ACK #{ack} ← recv (repeat 0..{ack}, still waiting #{exp}) @ {event.time:.1f}ms")
             # Use negative IDs for ACKs to avoid colliding with data packets
             self._track_flight(-ack - 1, "ack", "ok")
         elif event.type == EventType.ACK_RECEIVED:
@@ -1035,9 +1059,11 @@ class GBNLabApp(ctk.CTk):
             sn = self._last_snapshot
             new_base = sn.get("sender", {}).get("base", "?")
             if meta.get("is_duplicate"):
-                self._log("info", f"ACK #{ack} recv (dup — base already {new_base} > {ack}) @ {event.time:.1f}ms")
+                self._log(
+                    "info", f"ACK #{ack} recv (dup — base already {new_base} > {ack}) @ {event.time:.1f}ms")
             else:
-                self._log("ok", f"ACK #{ack} recv → window slides to base={new_base} @ {event.time:.1f}ms")
+                self._log(
+                    "ok", f"ACK #{ack} recv → window slides to base={new_base} @ {event.time:.1f}ms")
             self._active_flights.pop(-ack - 1, None)
         elif event.type == EventType.ACK_CORRUPTED:
             self._log("err", f"ACK #{ack} CORRUPTED  @ {event.time:.1f}ms")
@@ -1057,7 +1083,7 @@ class GBNLabApp(ctk.CTk):
             we = meta.get("window_end", "?")
             n = meta.get("window_size", "?")
             self._log("warn", f"TIMEOUT #{pid} → RESEND WINDOW [{ws}..{we}] N={n} "
-                               f"@ {event.time:.1f}ms")
+                      f"@ {event.time:.1f}ms")
             self._active_flights.pop(pid, None)
 
     def _track_flight(self, pkt_id: int, direction: str, result: str) -> None:
@@ -1073,7 +1099,8 @@ class GBNLabApp(ctk.CTk):
         self._stop_polling()
         self._stop_animation()
         self._replay_capturing = False
-        self._update_progress(metrics.get("delivered", 0), metrics.get("delivered", 0))
+        self._update_progress(metrics.get("delivered", 0),
+                              metrics.get("delivered", 0))
 
         # Clear any leftover flying packets/ACKs so the final canvas
         # draw doesn't show a stale "ACK still in the air" dot.
@@ -1096,7 +1123,8 @@ class GBNLabApp(ctk.CTk):
         tp = metrics.get("throughput_bps", 0) / 1000
         self._cards["throughput"].set(f"{tp:.1f}")
         self._cards["efficiency"].set(f"{eff:.1f}")
-        self._cards["retransmissions"].set(str(metrics.get("retransmissions", 0)))
+        self._cards["retransmissions"].set(
+            str(metrics.get("retransmissions", 0)))
         self._cards["timeouts"].set(str(metrics.get("timeouts", 0)))
         self._cards["delay"].set(f"{metrics.get('avg_delay_ms', 0):.1f}")
 
@@ -1174,7 +1202,8 @@ class GBNLabApp(ctk.CTk):
                   f"efficiency={eff:.1f}%, throughput={tp:.1f} kbps")
 
         # Show replay controls so user can seek through the captured events
-        self._log("info", "Replay mode active — drag the seek bar or use ▶/◀ to step through events")
+        self._log(
+            "info", "Replay mode active — drag the seek bar or use ▶/◀ to step through events")
         self._show_replay_controls()
 
     # Event Log
@@ -1204,7 +1233,7 @@ class GBNLabApp(ctk.CTk):
 
     def _schedule_animation(self) -> None:
         """Redraw canvas periodically.
-        
+
         During live simulation: records every frame for later replay.
         During replay mode: plays back pre-recorded frames.
         """
@@ -1226,7 +1255,8 @@ class GBNLabApp(ctk.CTk):
             self._redraw_canvas()
 
         if self._anim_active:
-            self._anim_id = self.after(ANIMATION_INTERVAL_MS, self._schedule_animation)
+            self._anim_id = self.after(
+                ANIMATION_INTERVAL_MS, self._schedule_animation)
 
     def _redraw_canvas(self) -> None:
         w = self._canvas.winfo_width()
@@ -1274,23 +1304,13 @@ class GBNLabApp(ctk.CTk):
         gap = PACKET_SPACING
         slot_w = box + gap  # default slot width
 
-        # UNIFIED GRID — compute shared slot width so sender & receiver align
+        # UNIFIED GRID — both rows scroll from base together, same slot width
 
         win_end = min(base + win_size, total)
         swin_visible = min(win_size, total - base)
         extra_ahead = 3
-        s_total_visible = min(swin_visible + extra_ahead, total - base,
-                              int((w - margin_left - margin_right) / slot_w))
-
-        # Receiver view advances with sender so both rows scroll together
-        recv_start = base
-        max_recv_relevant = max(expected + win_size + 2, base + win_size + extra_ahead)
-        max_recv_relevant = min(max_recv_relevant, total - 1)
-        r_total = max(max_recv_relevant - recv_start + 1, 1)
-        r_total = min(r_total, int((w - margin_left - margin_right) / slot_w))
-
-        # Use one slot width for both rows — scale down if needed
-        shared_total = max(s_total_visible, r_total)
+        shared_total = min(swin_visible + extra_ahead, total - base,
+                           int((w - margin_left - margin_right) / slot_w))
         available_w = w - margin_left - margin_right
         if shared_total * slot_w > available_w:
             shared_slot = available_w / max(shared_total, 1)
@@ -1328,7 +1348,7 @@ class GBNLabApp(ctk.CTk):
         # Store sender slot x-positions for flight targeting
         sender_slot_x: dict[int, float] = {}
 
-        for i in range(s_total_visible):
+        for i in range(shared_total):
             pkt = base + i
             if pkt >= total:
                 break
@@ -1364,27 +1384,28 @@ class GBNLabApp(ctk.CTk):
                 bracket_w = 2
 
             left_x = grid_start_x + base * shared_slot
-            right_x = grid_start_x + (base + swin_visible - 1) * shared_slot + shared_box
+            right_x = grid_start_x + \
+                (base + swin_visible - 1) * shared_slot + shared_box
 
             # Left bracket
             self._canvas.create_line(left_x - 5, sender_y - 12,
-                                      left_x - 5, sender_y + shared_box + 12,
-                                      fill=bracket_color, width=bracket_w, tags="dyn")
+                                     left_x - 5, sender_y + shared_box + 12,
+                                     fill=bracket_color, width=bracket_w, tags="dyn")
             # Right bracket
             self._canvas.create_line(right_x + 5, sender_y - 12,
-                                      right_x + 5, sender_y + shared_box + 12,
-                                      fill=bracket_color, width=bracket_w, tags="dyn")
+                                     right_x + 5, sender_y + shared_box + 12,
+                                     fill=bracket_color, width=bracket_w, tags="dyn")
             # Top bracket
             self._canvas.create_line(left_x - 5, sender_y - 12,
-                                      right_x + 5, sender_y - 12,
-                                      fill=bracket_color, width=1, tags="dyn")
+                                     right_x + 5, sender_y - 12,
+                                     fill=bracket_color, width=1, tags="dyn")
 
             label = f"N={win_size}"
             if is_resending:
                 label += f"  [RESEND {rw[0]}..{rw[1]}]"
             self._canvas.create_text((left_x + right_x) / 2, sender_y - 20,
-                                      text=label, fill=bracket_color,
-                                      font=(MONO_FONT, 9, "bold"), tags="dyn")
+                                     text=label, fill=bracket_color,
+                                     font=(MONO_FONT, 9, "bold"), tags="dyn")
 
         for pkt in range(base):
             x = grid_start_x + pkt * shared_slot
@@ -1403,37 +1424,18 @@ class GBNLabApp(ctk.CTk):
                 tags="dyn",
             )
 
-        # RECEIVER TRAIL — already-received packets scrolled past recv_start
-        for pkt in range(recv_start):
-            x = grid_start_x + pkt * shared_slot
-            if x + shared_box < grid_start_x:
-                continue
-            self._canvas.create_rectangle(
-                x, recv_y, x + shared_box, recv_y + shared_box,
-                fill=COLOR_ACKED, outline=COLOR_BORDER, width=1, stipple="gray50",
-                tags="dyn",
-            )
-            self._canvas.create_text(
-                x + shared_box / 2, recv_y + shared_box / 2,
-                text=str(pkt), fill=COLOR_TEXT_MUTED,
-                font=(MONO_FONT, shared_font, "bold"),
-                tags="dyn",
-            )
-
-        # RECEIVER BUFFER — aligned by ABSOLUTE packet ID (same grid as sender)
-        # Advances with sender so both rows scroll together
+        # RECEIVER BUFFER — shares viewport with sender, scrolling from base together
 
         # Store receiver slot x-positions for flight landing
         recv_slot_x: dict[int, float] = {}
 
-        for i in range(r_total):
-            pkt = recv_start + i
-            if pkt >= total:
-                break
+        recv_visible = min(shared_total, total - base)
+
+        for i in range(recv_visible):
+            pkt = base + i
             x = grid_start_x + pkt * shared_slot
 
             if pkt in received:
-                # Match sender trail: gray stipple + ACKED fill for sync
                 self._canvas.create_rectangle(
                     x, recv_y, x + shared_box, recv_y + shared_box,
                     fill=COLOR_ACKED, outline=COLOR_BORDER, width=1,
@@ -1459,12 +1461,30 @@ class GBNLabApp(ctk.CTk):
                                 tags="dyn")
             recv_slot_x[pkt] = x + shared_box / 2
 
+        # Gray stipple trail: received packets left of viewport (scrolled off-screen)
+        for pkt in range(min(base, total)):
+            if pkt in received:
+                x = grid_start_x + pkt * shared_slot
+                if x + shared_box < grid_start_x:
+                    continue
+                self._canvas.create_rectangle(
+                    x, recv_y, x + shared_box, recv_y + shared_box,
+                    fill=COLOR_ACKED, outline=COLOR_BORDER, width=1,
+                    stipple="gray50", tags="dyn",
+                )
+                self._canvas.create_text(
+                    x + shared_box / 2, recv_y + shared_box / 2,
+                    text=str(pkt), fill=COLOR_TEXT_MUTED,
+                    font=(MONO_FONT, shared_font, "bold"),
+                    tags="dyn",
+                )
+
         # Expected marker
-        if recv_start <= expected < recv_start + r_total:
-            ex_x = recv_slot_x.get(expected, grid_start_x + expected * shared_slot + shared_box / 2)
+        if expected in recv_slot_x:
+            ex_x = recv_slot_x[expected]
             self._canvas.create_text(ex_x, recv_y - 14,
-                                      text=f"Expected #{expected}", fill=COLOR_ACCENT,
-                                      font=(MONO_FONT, 9, "bold"), tags="dyn")
+                                     text=f"Expected #{expected}", fill=COLOR_ACCENT,
+                                     font=(MONO_FONT, 9, "bold"), tags="dyn")
 
         # FLYING PACKETS — X-interpolation from sender → receiver
 
@@ -1475,7 +1495,8 @@ class GBNLabApp(ctk.CTk):
             fail_point = self._FAIL_POINT
 
             # Track occupied positions to prevent overlap
-            occupied: dict[tuple[int, int], int] = {}  # (grid_x, grid_y) → count
+            # (grid_x, grid_y) → count
+            occupied: dict[tuple[int, int], int] = {}
 
             for flight_id, flight in list(self._active_flights.items()):
                 elapsed = self._anim_frame - flight["start_frame"]
@@ -1605,10 +1626,10 @@ class GBNLabApp(ctk.CTk):
         sent_count = len(sent)
         footer_y = recv_y + shared_box + 18
         self._canvas.create_text(label_x, footer_y,
-                                  text=f"Delivered: {delivered}/{total}  |  "
-                                       f"Sent (unACKed): {sent_count}",
-                                  anchor="w", fill=COLOR_TEXT_MUTED,
-                                  font=(MONO_FONT, 11), tags="dyn")
+                                 text=f"Delivered: {delivered}/{total}  |  "
+                                 f"Sent (unACKed): {sent_count}",
+                                 anchor="w", fill=COLOR_TEXT_MUTED,
+                                 font=(MONO_FONT, 11), tags="dyn")
 
         if needs_static:
             lx = w - margin_right - 120
@@ -1620,7 +1641,8 @@ class GBNLabApp(ctk.CTk):
             ]
             for i, (c, lbl) in enumerate(items):
                 y = footer_y + i * 18
-                self._canvas.create_rectangle(lx, y, lx + 12, y + 12, fill=c, outline="")
+                self._canvas.create_rectangle(
+                    lx, y, lx + 12, y + 12, fill=c, outline="")
                 self._canvas.create_text(lx + 18, y + 6, text=lbl, anchor="w",
                                          fill=COLOR_TEXT_MUTED, font=(MONO_FONT, 10))
 
@@ -1631,13 +1653,13 @@ class GBNLabApp(ctk.CTk):
             alpha = 3 - i  # fading opacity via stipple
             cx, cy = w // 2, h // 2
             self._canvas.create_oval(cx - r, cy - r, cx + r, cy + r,
-                                      fill="", outline="#6366f1",
-                                      width=1, dash=(1, alpha * 4))
+                                     fill="", outline="#6366f1",
+                                     width=1, dash=(1, alpha * 4))
 
     def _draw_neon_box(self, x: float, y: float, size: float, fill: str,
-                        outline: str = "", text: str = "", text_color: str = "",
-                        font=(MONO_FONT, 9, "bold"), pulse: bool = False,
-                        tags: str = "") -> None:
+                       outline: str = "", text: str = "", text_color: str = "",
+                       font=(MONO_FONT, 9, "bold"), pulse: bool = False,
+                       tags: str = "") -> None:
         """Draw a packet box with neon border."""
         self._canvas.create_rectangle(
             x, y, x + size, y + size,
@@ -1662,9 +1684,9 @@ class GBNLabApp(ctk.CTk):
         self._canvas.delete("all")
         self._canvas_size = (0, 0)  # force full redraw on next snapshot
         self._canvas.create_text(w // 2, h // 2,
-                                  text="Click 'Start Simulation'\nto begin",
-                                  fill=COLOR_TEXT_MUTED, font=(MONO_FONT, 14),
-                                  justify="center")
+                                 text="Click 'Start Simulation'\nto begin",
+                                 fill=COLOR_TEXT_MUTED, font=(MONO_FONT, 14),
+                                 justify="center")
 
     # Cleanup
 

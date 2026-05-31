@@ -139,7 +139,7 @@ class SplashScreen(ctk.CTkToplevel):
         if self._tick < self._total_ticks:
             self.after(120, self._animate_progress)
         else:
-            self.after(800, self._fade_out)
+            self._fade_out()
 
     def _fade_out(self) -> None:
         a = self.attributes("-alpha")
