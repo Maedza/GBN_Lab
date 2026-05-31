@@ -20,7 +20,7 @@ import tkinter as tk
 
 from config import (
     DEFAULT_WINDOW_SIZE, DEFAULT_BER, DEFAULT_PACKET_LOSS, DEFAULT_NUM_PACKETS,
-    DEFAULT_TIMEOUT_MS, DEFAULT_PACKET_SIZE_BITS, DEFAULT_DATA_RATE_KBPS,
+    DEFAULT_PACKET_SIZE_BITS, DEFAULT_DATA_RATE_KBPS,
     DEFAULT_PROPAGATION_DELAY_MS, DEFAULT_SIM_SPEED,
     GUI_UPDATE_INTERVAL_MS, ANIMATION_INTERVAL_MS,
     PACKET_BOX_SIZE, PACKET_SPACING, MAX_LOG_EVENTS,
@@ -205,11 +205,7 @@ class GBNLabApp(ctk.CTk):
             panel, "Bit Error Rate", DEFAULT_BER, 0.0, 0.01, 0.0001)
         self._loss_slider, self._loss_val = self._slider(
             panel, "Packet Loss", DEFAULT_PACKET_LOSS, 0.0, 0.5, 0.01)
-        self._timeout_slider, self._timeout_val = self._slider(
-            panel, "Timeout (ms)", DEFAULT_TIMEOUT_MS, 0, 2000, 50)
-        self._timeout_slider.configure(
-            command=lambda v: self._timeout_val.configure(
-                text="auto" if float(v) == 0 else str(int(float(v)))))
+        # Timeout is always auto (adaptive 3× RTT) — no slider needed
         self._packets_slider, self._packets_val = self._slider(
             panel, "Packets to Send", DEFAULT_NUM_PACKETS, 1, 20, 1)
         self._speed_slider, self._speed_val = self._slider(
@@ -434,14 +430,11 @@ class GBNLabApp(ctk.CTk):
         self._window_slider.set(preset["window_size"])
         self._ber_slider.set(preset["ber"])
         self._loss_slider.set(preset["packet_loss"])
-        self._timeout_slider.set(preset["timeout_ms"])
         self._packets_slider.set(preset["num_packets"])
         # Update display labels
         self._window_val.configure(text=str(preset["window_size"]))
         self._ber_val.configure(text=f"{preset['ber']:.4f}")
         self._loss_val.configure(text=f"{preset['packet_loss']:.2f}")
-        to_ms = preset["timeout_ms"]
-        self._timeout_val.configure(text="auto" if to_ms == 0 else str(to_ms))
         self._packets_val.configure(text=str(preset["num_packets"]))
         # Store scenario context for step-by-step overlay
         self._active_scenario = {
@@ -459,7 +452,7 @@ class GBNLabApp(ctk.CTk):
         window_size = int(self._window_slider.get())
         ber = round(self._ber_slider.get(), 4)
         packet_loss = round(self._loss_slider.get(), 4)
-        timeout_ms = int(self._timeout_slider.get())
+        timeout_ms = 0  # always auto (adaptive 3× RTT)
         num_packets = int(self._packets_slider.get())
         sim_speed = round(self._speed_slider.get(), 1)
 
@@ -478,9 +471,8 @@ class GBNLabApp(ctk.CTk):
         self._sim_speed_replay = sim_speed  # store for replay pacing
 
         # Log initial info BEFORE starting the sim so it appears first
-        to_label = "auto" if timeout_ms == 0 else f"{timeout_ms}ms"
         self._log("info", f"Go-Back-N |  N={window_size}  BER={ber:.4f}  "
-                  f"loss={packet_loss:.0%}  pkts={num_packets}  timeout={to_label}")
+                  f"loss={packet_loss:.0%}  pkts={num_packets}  timeout=auto")
 
         self._sim.start()
         self._set_status(STATUS_RUNNING)
