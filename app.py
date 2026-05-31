@@ -1282,8 +1282,12 @@ class GBNLabApp(ctk.CTk):
         s_total_visible = min(swin_visible + extra_ahead, total - base,
                               int((w - margin_left - margin_right) / slot_w))
 
-        max_relevant = min(max(expected + win_size + 2, base + win_size), total - 1)
-        r_total = min(max_relevant + 1, total, int((w - margin_left - margin_right) / slot_w))
+        # Receiver view advances with sender so both rows scroll together
+        recv_start = base
+        max_recv_relevant = max(expected + win_size + 2, base + win_size + extra_ahead)
+        max_recv_relevant = min(max_recv_relevant, total - 1)
+        r_total = max(max_recv_relevant - recv_start + 1, 1)
+        r_total = min(r_total, int((w - margin_left - margin_right) / slot_w))
 
         # Use one slot width for both rows — scale down if needed
         shared_total = max(s_total_visible, r_total)
@@ -1399,13 +1403,33 @@ class GBNLabApp(ctk.CTk):
                 tags="dyn",
             )
 
+        # RECEIVER TRAIL — already-received packets scrolled past recv_start
+        for pkt in range(recv_start):
+            x = grid_start_x + pkt * shared_slot
+            if x + shared_box < grid_start_x:
+                continue
+            self._canvas.create_rectangle(
+                x, recv_y, x + shared_box, recv_y + shared_box,
+                fill=COLOR_ACKED, outline=COLOR_BORDER, width=1, stipple="gray50",
+                tags="dyn",
+            )
+            self._canvas.create_text(
+                x + shared_box / 2, recv_y + shared_box / 2,
+                text=str(pkt), fill=COLOR_TEXT_MUTED,
+                font=(MONO_FONT, shared_font, "bold"),
+                tags="dyn",
+            )
+
         # RECEIVER BUFFER — aligned by ABSOLUTE packet ID (same grid as sender)
+        # Advances with sender so both rows scroll together
 
         # Store receiver slot x-positions for flight landing
         recv_slot_x: dict[int, float] = {}
 
         for i in range(r_total):
-            pkt = i  # absolute packet ID
+            pkt = recv_start + i
+            if pkt >= total:
+                break
             x = grid_start_x + pkt * shared_slot
 
             if pkt in received:
@@ -1436,7 +1460,7 @@ class GBNLabApp(ctk.CTk):
             recv_slot_x[pkt] = x + shared_box / 2
 
         # Expected marker
-        if expected < r_total:
+        if recv_start <= expected < recv_start + r_total:
             ex_x = recv_slot_x.get(expected, grid_start_x + expected * shared_slot + shared_box / 2)
             self._canvas.create_text(ex_x, recv_y - 14,
                                       text=f"Expected #{expected}", fill=COLOR_ACCENT,
