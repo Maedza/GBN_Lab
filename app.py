@@ -1256,6 +1256,8 @@ class GBNLabApp(ctk.CTk):
 
         margin_left = 40
         margin_right = 40
+        grid_start_x = margin_left + 85  # boxes start after heading labels
+        label_x = 40  # text labels position
 
         # Compute layout
         sender_y = 50
@@ -1309,10 +1311,10 @@ class GBNLabApp(ctk.CTk):
             self._draw_neon_background(w, h)
 
         if needs_static:
-            self._canvas.create_text(margin_left, sender_y - 30,
+            self._canvas.create_text(label_x, sender_y - 30,
                                      text="SENDER", anchor="w",
                                      fill=COLOR_ACCENT, font=(MONO_FONT, 15, "bold"))
-            self._canvas.create_text(margin_left, recv_y + shared_box + 24,
+            self._canvas.create_text(label_x, recv_y - 20,
                                      text="RECEIVER", anchor="w",
                                      fill=COLOR_SUCCESS, font=(MONO_FONT, 15, "bold"))
 
@@ -1335,7 +1337,7 @@ class GBNLabApp(ctk.CTk):
             if pkt >= total:
                 break
             # Position by ABSOLUTE packet ID so sender grid lines up with receiver grid
-            x = margin_left + pkt * shared_slot
+            x = grid_start_x + pkt * shared_slot
 
             if pkt in timed:
                 color = COLOR_TIMEOUT
@@ -1365,8 +1367,8 @@ class GBNLabApp(ctk.CTk):
                 bracket_color = COLOR_ACCENT
                 bracket_w = 2
 
-            left_x = margin_left + base * shared_slot
-            right_x = margin_left + (base + swin_visible - 1) * shared_slot + shared_box
+            left_x = grid_start_x + base * shared_slot
+            right_x = grid_start_x + (base + swin_visible - 1) * shared_slot + shared_box
 
             # Left bracket
             self._canvas.create_line(left_x - 5, sender_y - 12,
@@ -1389,9 +1391,9 @@ class GBNLabApp(ctk.CTk):
                                       font=(MONO_FONT, 9, "bold"), tags="dyn")
 
         for pkt in range(base):
-            x = margin_left + pkt * shared_slot
+            x = grid_start_x + pkt * shared_slot
             # Only draw what's on-screen; skip packets scrolled far left
-            if x + shared_box < margin_left:
+            if x + shared_box < grid_start_x:
                 continue
             self._canvas.create_rectangle(
                 x, sender_y, x + shared_box, sender_y + shared_box,
@@ -1412,7 +1414,7 @@ class GBNLabApp(ctk.CTk):
 
         for i in range(r_total):
             pkt = i  # absolute packet ID
-            x = margin_left + pkt * shared_slot
+            x = grid_start_x + pkt * shared_slot
 
             if pkt in received:
                 # Match sender trail: gray stipple + ACKED fill for sync
@@ -1443,7 +1445,7 @@ class GBNLabApp(ctk.CTk):
 
         # Expected marker
         if expected < r_total:
-            ex_x = recv_slot_x.get(expected, margin_left + expected * shared_slot + shared_box / 2)
+            ex_x = recv_slot_x.get(expected, grid_start_x + expected * shared_slot + shared_box / 2)
             self._canvas.create_text(ex_x, recv_y - 14,
                                       text=f"Expected #{expected}", fill=COLOR_ACCENT,
                                       font=(MONO_FONT, 9, "bold"), tags="dyn")
@@ -1490,7 +1492,7 @@ class GBNLabApp(ctk.CTk):
                     start_x = sender_slot_x[display_pkt]
                 elif sender_col < 0:
                     # Off-screen left — pin to left edge
-                    start_x = margin_left + dot_r + 4
+                    start_x = grid_start_x + dot_r + 4
                 else:
                     # Off-screen right — pin to right edge
                     start_x = w - margin_right - dot_r
@@ -1500,7 +1502,7 @@ class GBNLabApp(ctk.CTk):
                     end_x = recv_slot_x[display_pkt]
                 else:
                     # Fallback: compute from slot width
-                    end_x = margin_left + display_pkt * shared_slot + shared_box / 2
+                    end_x = grid_start_x + display_pkt * shared_slot + shared_box / 2
 
                 # Interpolate X based on progress
                 t = progress
@@ -1508,7 +1510,7 @@ class GBNLabApp(ctk.CTk):
                 x = start_x + ease * (end_x - start_x)
 
                 # Clamp X to canvas bounds
-                x = max(margin_left + dot_r, min(x, w - margin_right - dot_r))
+                x = max(grid_start_x + dot_r, min(x, w - margin_right - dot_r))
 
                 top_y = sender_y + shared_box + dot_r
                 bot_y = recv_y - dot_r
@@ -1586,7 +1588,7 @@ class GBNLabApp(ctk.CTk):
         delivered = snap.get("delivered", 0)
         sent_count = len(sent)
         footer_y = recv_y + shared_box + 18
-        self._canvas.create_text(margin_left, footer_y,
+        self._canvas.create_text(label_x, footer_y,
                                   text=f"Delivered: {delivered}/{total}  |  "
                                        f"Sent (unACKed): {sent_count}",
                                   anchor="w", fill=COLOR_TEXT_MUTED,
