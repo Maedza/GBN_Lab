@@ -46,8 +46,6 @@ ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
 
-# Metric Card
-
 class MetricCard(ctk.CTkFrame):
     """A single metric display: title + large value + unit."""
 
@@ -89,7 +87,6 @@ class GBNLabApp(ctk.CTk):
         self.minsize(int(900 * self._s), int(580 * self._s))
         self.configure(fg_color=COLOR_BG)
 
-        # Simulation engine
         self._sim: Optional[GBNSimulation] = None
         self._state: dict = {}
         self._last_snapshot: dict = {}
@@ -145,7 +142,6 @@ class GBNLabApp(ctk.CTk):
         # Draw placeholder AFTER window is mapped (otherwise winfo_width hangs on macOS)
         self.after(100, self._draw_placeholder)
 
-        # Force-quit guards
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         self.bind_all("<Command-q>", lambda e: self._force_quit())
         self.bind_all("<Control-q>", lambda e: self._force_quit())
@@ -416,8 +412,6 @@ class GBNLabApp(ctk.CTk):
                                         text_color=COLOR_TEXT_MUTED)
         self._chan_label.pack(padx=14, anchor="w")
 
-    # Status
-
     _STATUS_COLORS = {
         STATUS_IDLE: "#475569",
         STATUS_RUNNING: COLOR_SUCCESS,
@@ -558,8 +552,6 @@ class GBNLabApp(ctk.CTk):
         self._active_flights.clear()
         self._canvas.delete("all")
         self._draw_placeholder()
-
-    # Polling
 
     def _start_polling(self) -> None:
         if self._poll_id:
@@ -1706,8 +1698,6 @@ class GBNLabApp(ctk.CTk):
                                  text="Click 'Start Simulation'\nto begin",
                                  fill=COLOR_TEXT_MUTED, font=(MONO_FONT, font_size),
                                  justify="center")
-
-    # Cleanup
 
     def _on_close(self) -> None:
         self._stop_polling()

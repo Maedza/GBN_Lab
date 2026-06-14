@@ -44,8 +44,6 @@ class Channel:
         self.ber = max(0.0, min(1.0, ber))
         self.packet_loss = max(0.0, min(1.0, packet_loss))
         self.propagation_delay_ms = propagation_delay_ms
-        self.data_rate_kbps = data_rate_kbps
-
         # Statistics
         self.packets_through = 0
         self.corrupted = 0
@@ -108,23 +106,9 @@ class GBNState:
 
 
 class GBNSimulation:
-    """Complete Go-Back-N simulation: channel + protocol + event engine.
+    """Go-Back-N simulation engine. Runs in a background thread.
 
-    Runs in a background thread; call poll() periodically from the GUI thread
-    to receive events and state snapshots.
-
-    Usage:
-        sim = GBNSimulation(window_size=4, ber=0.0001, num_packets=40)
-        sim.start()
-        while sim.running:
-            for msg in sim.poll():
-                if msg["type"] == "event":
-                    ...  # handle event
-                elif msg["type"] == "done":
-                    ...  # simulation complete
-                elif msg["type"] == "tick":
-                    ...  # state snapshot
-        metrics = sim.metrics
+    Call poll() periodically from the GUI thread for events and snapshots.
     """
 
     def __init__(self, *, window_size: int = 4, ber: float = 0.0001,
@@ -157,16 +141,14 @@ class GBNSimulation:
         self.end_time = 0.0
         self.total_delay = 0.0
 
-        # Engine internals
         self._event_heap: list[SimEvent] = []
-        self._msg_queue: queue.Queue = queue.Queue(maxsize=300)  # bounded to prevent RAM explosion
+        self._msg_queue: queue.Queue = queue.Queue(maxsize=300)
         self._thread: Optional[threading.Thread] = None
         self._stop = threading.Event()
         self._sim_time: float = 0.0
         self._running = False
-        self._event_count: int = 0  # for throttling emits
+        self._event_count: int = 0
 
-        # Timer tracking — GBN uses ONE timer for the oldest unACKed packet
         self._timeout_pending: bool = False
 
     @property
@@ -381,7 +363,6 @@ class GBNSimulation:
         s = self.state
 
         if pid == s.expected:
-            # Accept in-order
             self.delivered += 1
             delay = event.time - max(self.start_time, 0)
             self.total_delay += delay

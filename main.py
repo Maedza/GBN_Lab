@@ -13,8 +13,6 @@ def main():
     app = GBNLabApp()
 
     def _show_app():
-        """Called by splash after fade-out completes."""
-        # Restore full opacity + bring to front
         app.attributes("-alpha", 1.0)
         app.deiconify()
         app.lift()

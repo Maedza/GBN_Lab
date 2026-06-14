@@ -71,7 +71,7 @@ COLOR_SENT = COLOR_ACCENT    # sent, awaiting ACK
 COLOR_ACKED = COLOR_SUCCESS  # acknowledged / delivered
 COLOR_TIMEOUT = COLOR_ERROR  # timed out / corrupted
 
-# ---- Status States ----
+# ---- Status ----
 STATUS_IDLE = "Idle"
 STATUS_RUNNING = "Running"
 STATUS_COMPLETE = "Complete"

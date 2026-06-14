@@ -1,8 +1,5 @@
 """
-E_force Software — Splash / Loading Screen.
-
-Displays a branded splash window while the main application
-initialises, then fades out and hands off to the main window.
+E_force Software — Splash screen.
 """
 
 from __future__ import annotations
@@ -40,7 +37,6 @@ class SplashScreen(ctk.CTkToplevel):
         self.grab_set()
         self.attributes("-topmost", True)
 
-        # Rounded-corner illusion with a frame
         frame = ctk.CTkFrame(self, fg_color="#0f172a", corner_radius=int(16 * s),
                              border_width=2, border_color="#334155")
         frame.pack(fill="both", expand=True, padx=1, pady=1)
@@ -99,7 +95,6 @@ class SplashScreen(ctk.CTkToplevel):
             text_color="#334155",
         ).pack(pady=(int(20 * s), 0))
 
-        # Animate in
         self.attributes("-alpha", 0.0)
         self._fade_in()
 
