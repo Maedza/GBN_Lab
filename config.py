@@ -2,6 +2,34 @@
 Go-Back-N Protocol Simulator — Configuration & Constants.
 """
 
+from __future__ import annotations
+
+# ---- Screen-aware Scaling ----
+# Reference design was built for a 1920×1080 screen at 100 % DPI.
+# All layout constants below are *unscaled* (1×).  At startup the app
+# computes a CANVAS_SCALE multiplier from the actual screen dimensions
+# so the UI looks the same size regardless of resolution or laptop.
+
+_REFERENCE_WIDTH = 1920
+_REFERENCE_HEIGHT = 1080
+CANVAS_SCALE: float = 1.0
+
+
+def init_scale(sw: int, sh: int) -> float:
+    """Compute screen-density scale factor. Call once at app startup."""
+    global CANVAS_SCALE
+    # Use the average of both axes so the scale tracks the overall screen
+    # area, not the narrowest axis (which punishes short-but-wide displays).
+    w_ratio = sw / _REFERENCE_WIDTH
+    h_ratio = sh / _REFERENCE_HEIGHT
+    area_ratio = (w_ratio + h_ratio) / 2.0
+    CANVAS_SCALE = area_ratio
+    # Never shrink below reference — set a modest boost so the UI feels
+    # comfortable on high-DPI screens. Ceiling at 1.6 for huge displays.
+    CANVAS_SCALE = max(1.12, min(CANVAS_SCALE, 1.6))
+    return CANVAS_SCALE
+
+
 # ---- Default Simulation Parameters ----
 DEFAULT_WINDOW_SIZE = 4
 DEFAULT_BER = 0.0001          # Bit error rate (0.0 – 1.0)

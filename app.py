@@ -19,6 +19,7 @@ import customtkinter as ctk
 import tkinter as tk
 
 from config import (
+    init_scale,
     DEFAULT_WINDOW_SIZE, DEFAULT_BER, DEFAULT_PACKET_LOSS, DEFAULT_NUM_PACKETS,
     DEFAULT_PACKET_SIZE_BITS, DEFAULT_DATA_RATE_KBPS,
     DEFAULT_PROPAGATION_DELAY_MS, DEFAULT_SIM_SPEED,
@@ -74,13 +75,18 @@ class GBNLabApp(ctk.CTk):
         super().__init__()
         self.title("GBN Lab — E_force Software")
 
-        # 90 % of screen, centred
+        # Screen-aware scaling — ensures the UI looks the same size on
+        # any laptop/display regardless of resolution.
         sw = self.winfo_screenwidth()
         sh = self.winfo_screenheight()
+        self._s = init_scale(sw, sh)
+        ctk.set_widget_scaling(self._s)
+
+        # 90 % of screen, centred
         w, h = int(sw * 0.9), int(sh * 0.9)
         x, y = (sw - w) // 2, (sh - h) // 2
         self.geometry(f"{w}x{h}+{x}+{y}")
-        self.minsize(1000, 640)
+        self.minsize(int(900 * self._s), int(580 * self._s))
         self.configure(fg_color=COLOR_BG)
 
         # Simulation engine
@@ -177,9 +183,9 @@ class GBNLabApp(ctk.CTk):
         body = ctk.CTkFrame(self, fg_color="transparent")
         body.pack(fill="both", expand=True)
 
-        body.grid_columnconfigure(0, weight=0, minsize=240)
+        body.grid_columnconfigure(0, weight=0, minsize=int(240 * self._s))
         body.grid_columnconfigure(1, weight=3)
-        body.grid_columnconfigure(2, weight=0, minsize=240)
+        body.grid_columnconfigure(2, weight=0, minsize=int(240 * self._s))
         body.grid_rowconfigure(0, weight=1)
 
         self._build_controls(body)
@@ -1286,14 +1292,16 @@ class GBNLabApp(ctk.CTk):
         else:
             self._canvas.delete("dyn")
 
-        margin_left = 40
-        margin_right = 40
-        grid_start_x = margin_left + 85  # boxes start after heading labels
-        label_x = 40  # text labels position
+        s = self._s  # screen-density scale factor
+
+        margin_left = int(40 * s)
+        margin_right = int(40 * s)
+        grid_start_x = margin_left + int(85 * s)  # boxes start after heading labels
+        label_x = int(40 * s)  # text labels position
 
         # Compute layout
-        sender_y = 50
-        recv_y = h - 130
+        sender_y = int(50 * s)
+        recv_y = h - int(130 * s)
         mid_y = h / 2
 
         sender = snap.get("sender", {})
@@ -1310,8 +1318,8 @@ class GBNLabApp(ctk.CTk):
         received = set(recv.get("received", []))
         corrupted = set(recv.get("corrupted", []))
 
-        box = PACKET_BOX_SIZE
-        gap = PACKET_SPACING
+        box = int(PACKET_BOX_SIZE * s)
+        gap = int(PACKET_SPACING * s)
         slot_w = box + gap  # default slot width
 
         # UNIFIED GRID — both rows scroll from base together, same slot width
@@ -1324,12 +1332,12 @@ class GBNLabApp(ctk.CTk):
         available_w = w - margin_left - margin_right
         if shared_total * slot_w > available_w:
             shared_slot = available_w / max(shared_total, 1)
-            shared_box = max(14, shared_slot - 2)
+            shared_box = max(int(14 * s), shared_slot - int(2 * s))
             shared_font = max(7, int(shared_box // 3))
         else:
             shared_slot = slot_w
             shared_box = box
-            shared_font = max(9, box // 3)
+            shared_font = max(int(9 * s), box // 3)
 
         # === STATIC ELEMENTS (drawn once, only redrawn on resize) ===
 
@@ -1337,19 +1345,19 @@ class GBNLabApp(ctk.CTk):
             self._draw_neon_background(w, h)
 
         if needs_static:
-            self._canvas.create_text(label_x, sender_y - 30,
+            self._canvas.create_text(label_x, sender_y - int(30 * s),
                                      text="SENDER", anchor="w",
-                                     fill=COLOR_ACCENT, font=(MONO_FONT, 15, "bold"))
-            self._canvas.create_text(label_x, recv_y - 20,
+                                     fill=COLOR_ACCENT, font=(MONO_FONT, int(15 * s), "bold"))
+            self._canvas.create_text(label_x, recv_y - int(20 * s),
                                      text="RECEIVER", anchor="w",
-                                     fill=COLOR_SUCCESS, font=(MONO_FONT, 15, "bold"))
+                                     fill=COLOR_SUCCESS, font=(MONO_FONT, int(15 * s), "bold"))
 
             ch_color = "#4f46e5"
             ch_width = 2
             self._canvas.create_line(0, mid_y, w, mid_y, fill=ch_color,
                                      dash=(6, 4), width=ch_width)
-            self._canvas.create_text(w // 2, mid_y - 12, text="CHANNEL",
-                                     fill=COLOR_TEXT_MUTED, font=(MONO_FONT, 10))
+            self._canvas.create_text(w // 2, mid_y - int(12 * s), text="CHANNEL",
+                                     fill=COLOR_TEXT_MUTED, font=(MONO_FONT, int(10 * s)))
 
         # === DYNAMIC ELEMENTS (redrawn every frame) ===
 
@@ -1398,24 +1406,24 @@ class GBNLabApp(ctk.CTk):
                 (base + swin_visible - 1) * shared_slot + shared_box
 
             # Left bracket
-            self._canvas.create_line(left_x - 5, sender_y - 12,
-                                     left_x - 5, sender_y + shared_box + 12,
+            self._canvas.create_line(left_x - int(5 * s), sender_y - int(12 * s),
+                                     left_x - int(5 * s), sender_y + shared_box + int(12 * s),
                                      fill=bracket_color, width=bracket_w, tags="dyn")
             # Right bracket
-            self._canvas.create_line(right_x + 5, sender_y - 12,
-                                     right_x + 5, sender_y + shared_box + 12,
+            self._canvas.create_line(right_x + int(5 * s), sender_y - int(12 * s),
+                                     right_x + int(5 * s), sender_y + shared_box + int(12 * s),
                                      fill=bracket_color, width=bracket_w, tags="dyn")
             # Top bracket
-            self._canvas.create_line(left_x - 5, sender_y - 12,
-                                     right_x + 5, sender_y - 12,
+            self._canvas.create_line(left_x - int(5 * s), sender_y - int(12 * s),
+                                     right_x + int(5 * s), sender_y - int(12 * s),
                                      fill=bracket_color, width=1, tags="dyn")
 
             label = f"N={win_size}"
             if is_resending:
                 label += f"  [RESEND {rw[0]}..{rw[1]}]"
-            self._canvas.create_text((left_x + right_x) / 2, sender_y - 20,
+            self._canvas.create_text((left_x + right_x) / 2, sender_y - int(20 * s),
                                      text=label, fill=bracket_color,
-                                     font=(MONO_FONT, 9, "bold"), tags="dyn")
+                                     font=(MONO_FONT, int(9 * s), "bold"), tags="dyn")
 
         for pkt in range(base):
             x = grid_start_x + pkt * shared_slot
@@ -1492,14 +1500,14 @@ class GBNLabApp(ctk.CTk):
         # Expected marker
         if expected in recv_slot_x:
             ex_x = recv_slot_x[expected]
-            self._canvas.create_text(ex_x, recv_y - 14,
+            self._canvas.create_text(ex_x, recv_y - int(14 * s),
                                      text=f"Expected #{expected}", fill=COLOR_ACCENT,
-                                     font=(MONO_FONT, 9, "bold"), tags="dyn")
+                                     font=(MONO_FONT, int(9 * s), "bold"), tags="dyn")
 
         # FLYING PACKETS — X-interpolation from sender → receiver
 
         if self._active_flights:
-            dot_r = 7
+            dot_r = int(7 * s)
             flight_frames = max(self._FLIGHT_FRAMES, 1)
             fail_disp = self._FAIL_DISPLAY_FRAMES
             fail_point = self._FAIL_POINT
@@ -1597,14 +1605,14 @@ class GBNLabApp(ctk.CTk):
                 if is_failure:
                     self._canvas.create_text(
                         x, y, text="✗",
-                        fill=COLOR_ERROR, font=(MONO_FONT, 12, "bold"),
+                        fill=COLOR_ERROR, font=(MONO_FONT, max(8, int(12 * s)), "bold"),
                         tags="dyn"
                     )
                 else:
                     label = f"#{display_pkt}" if flight_id >= 0 else f"ACK{display_pkt}"
                     self._canvas.create_text(
-                        x, y + dot_r + 8, text=label,
-                        fill=fill, font=(MONO_FONT, 7), tags="dyn"
+                        x, y + dot_r + int(8 * s), text=label,
+                        fill=fill, font=(MONO_FONT, max(5, int(7 * s))), tags="dyn"
                     )
 
                 if is_failure and progress >= fail_point:
@@ -1616,7 +1624,9 @@ class GBNLabApp(ctk.CTk):
                         fill=fill, width=1.5, tags="dyn"
                     )
                     self._canvas.create_polygon(
-                        x - 3, arrow_tip_y - 4, x + 3, arrow_tip_y - 4, x, arrow_tip_y,
+                        x - int(3 * s), arrow_tip_y - int(4 * s),
+                        x + int(3 * s), arrow_tip_y - int(4 * s),
+                        x, arrow_tip_y,
                         fill=fill, outline="", tags="dyn"
                     )
                 else:
@@ -1626,7 +1636,9 @@ class GBNLabApp(ctk.CTk):
                         fill=fill, width=1.5, tags="dyn"
                     )
                     self._canvas.create_polygon(
-                        x - 3, arrow_tip_y + 4, x + 3, arrow_tip_y + 4, x, arrow_tip_y,
+                        x - int(3 * s), arrow_tip_y + int(4 * s),
+                        x + int(3 * s), arrow_tip_y + int(4 * s),
+                        x, arrow_tip_y,
                         fill=fill, outline="", tags="dyn"
                     )
 
@@ -1634,15 +1646,15 @@ class GBNLabApp(ctk.CTk):
 
         delivered = snap.get("delivered", 0)
         sent_count = len(sent)
-        footer_y = recv_y + shared_box + 18
+        footer_y = recv_y + shared_box + int(18 * s)
         self._canvas.create_text(label_x, footer_y,
                                  text=f"Delivered: {delivered}/{total}  |  "
                                  f"Sent (unACKed): {sent_count}",
                                  anchor="w", fill=COLOR_TEXT_MUTED,
-                                 font=(MONO_FONT, 11), tags="dyn")
+                                 font=(MONO_FONT, int(11 * s)), tags="dyn")
 
         if needs_static:
-            lx = w - margin_right - 120
+            lx = w - margin_right - int(120 * s)
             items = [
                 (COLOR_SENT, "Sent / UnACKed"),
                 (COLOR_ACKED, "ACKed / Received"),
@@ -1650,16 +1662,17 @@ class GBNLabApp(ctk.CTk):
                 (COLOR_UNSENT, "Not yet sent"),
             ]
             for i, (c, lbl) in enumerate(items):
-                y = footer_y + i * 18
+                y = footer_y + i * int(18 * s)
                 self._canvas.create_rectangle(
-                    lx, y, lx + 12, y + 12, fill=c, outline="")
-                self._canvas.create_text(lx + 18, y + 6, text=lbl, anchor="w",
-                                         fill=COLOR_TEXT_MUTED, font=(MONO_FONT, 10))
+                    lx, y, lx + int(12 * s), y + int(12 * s), fill=c, outline="")
+                self._canvas.create_text(lx + int(18 * s), y + int(6 * s), text=lbl, anchor="w",
+                                         fill=COLOR_TEXT_MUTED, font=(MONO_FONT, int(10 * s)))
 
     def _draw_neon_background(self, w: int, h: int) -> None:
         """Subtle radial glow effect for neon mode."""
+        s = self._s
         for i in range(3):
-            r = 50 + i * 30
+            r = int((50 + i * 30) * s)
             alpha = 3 - i  # fading opacity via stipple
             cx, cy = w // 2, h // 2
             self._canvas.create_oval(cx - r, cy - r, cx + r, cy + r,
@@ -1693,9 +1706,10 @@ class GBNLabApp(ctk.CTk):
             return
         self._canvas.delete("all")
         self._canvas_size = (0, 0)  # force full redraw on next snapshot
+        font_size = max(10, int(14 * self._s))
         self._canvas.create_text(w // 2, h // 2,
                                  text="Click 'Start Simulation'\nto begin",
-                                 fill=COLOR_TEXT_MUTED, font=(MONO_FONT, 14),
+                                 fill=COLOR_TEXT_MUTED, font=(MONO_FONT, font_size),
                                  justify="center")
 
     # Cleanup
