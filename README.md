@@ -4,15 +4,8 @@ Interactive visual simulation of the Go-Back-N Automatic Repeat Request protocol
 
 ## Quick Start
 
-**macOS / Linux:**
 ```bash
 ./setup.sh        # creates venv, installs deps
-python main.py    # launches the simulator
-```
-
-**Windows (double-click or run):**
-```
-setup.bat         # creates venv, installs deps
 python main.py    # launches the simulator
 ```
 
@@ -23,8 +16,9 @@ python main.py    # launches the simulator
 - Scenario presets: Low Errors, Moderate Noise, High BER, Packet Loss
 - Step-by-step mode pausing on anomalies
 - Post-simulation replay with timeline scrubber
+- Live efficiency-over-time chart in the metrics panel
 
 ## Requirements
 
 - Python 3.9+
-- `customtkinter` (auto-installed by setup script)
+- `customtkinter>=5.2.0` (see `requirements.txt`)
