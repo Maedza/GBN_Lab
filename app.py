@@ -370,7 +370,7 @@ class GBNLabApp(ctk.CTk):
 
         header = ctk.CTkFrame(log_frame, fg_color="transparent", height=26)
         header.grid(row=0, column=0, sticky="ew", padx=8, pady=(4, 0))
-        ctk.CTkLabel(header, text="Event Log", font=ctk.CTkFont(size=13, weight="bold"),
+        ctk.CTkLabel(header, text="Event Log", font=ctk.CTkFont(size=15, weight="bold"),
                      text_color=COLOR_TEXT_MUTED).pack(side="left")
 
         self._log_text = tk.Text(log_frame, bg="#0f172a", fg=COLOR_TEXT,
@@ -1301,7 +1301,7 @@ class GBNLabApp(ctk.CTk):
 
         # Compute layout
         sender_y = int(50 * s)
-        recv_y = h - int(130 * s)
+        recv_y = h - int(118 * s)
         mid_y = h / 2
 
         sender = snap.get("sender", {})
@@ -1497,12 +1497,7 @@ class GBNLabApp(ctk.CTk):
                     tags="dyn",
                 )
 
-        # Expected marker
-        if expected in recv_slot_x:
-            ex_x = recv_slot_x[expected]
-            self._canvas.create_text(ex_x, recv_y - int(14 * s),
-                                     text=f"Expected #{expected}", fill=COLOR_ACCENT,
-                                     font=(MONO_FONT, int(9 * s), "bold"), tags="dyn")
+
 
         # FLYING PACKETS — X-interpolation from sender → receiver
 
@@ -1646,7 +1641,7 @@ class GBNLabApp(ctk.CTk):
 
         delivered = snap.get("delivered", 0)
         sent_count = len(sent)
-        footer_y = recv_y + shared_box + int(18 * s)
+        footer_y = recv_y + shared_box + int(14 * s)
         self._canvas.create_text(label_x, footer_y,
                                  text=f"Delivered: {delivered}/{total}  |  "
                                  f"Sent (unACKed): {sent_count}",
