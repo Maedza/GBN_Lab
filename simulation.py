@@ -44,6 +44,7 @@ class Channel:
         self.ber = max(0.0, min(1.0, ber))
         self.packet_loss = max(0.0, min(1.0, packet_loss))
         self.propagation_delay_ms = propagation_delay_ms
+        self.data_rate_kbps = data_rate_kbps
         # Statistics
         self.packets_through = 0
         self.corrupted = 0
@@ -237,26 +238,30 @@ class GBNSimulation:
     def _run(self) -> None:
         """Main event loop, runs in background thread with rate-limiting.
 
-        Events are emitted one at a time to the GUI, with a sleep between
-        each so the event log and animation are human-readable.
+        Events at the same sim-time are emitted together so the initial
+        send burst fires in rapid succession — multiple packets appear
+        in-flight simultaneously like a real GBN pipeline.
         """
         while not self._stop.is_set() and self._event_heap:
-            event = heapq.heappop(self._event_heap)
-            self._sim_time = event.time
-            self._event_count += 1
+            # Process all events at the current earliest sim-time together
+            now = self._event_heap[0].time
+            while self._event_heap and self._event_heap[0].time <= now:
+                event = heapq.heappop(self._event_heap)
+                self._sim_time = event.time
+                self._event_count += 1
 
-            # Dispatch
-            new = self._step(event)
-            for evt in new:
-                if evt.time < self._sim_time:
-                    evt.time = self._sim_time + 0.001
-                heapq.heappush(self._event_heap, evt)
+                new = self._step(event)
+                for evt in new:
+                    if evt.time < self._sim_time:
+                        evt.time = self._sim_time + 0.001
+                    heapq.heappush(self._event_heap, evt)
 
-            # Emit every event so the log reads step by step
-            self._emit({"type": "event", "event": event, "state_snapshot": self._make_snapshot()})
+                self._emit({"type": "event", "event": event,
+                            "state_snapshot": self._make_snapshot()})
 
-            # Completion check AFTER emit → last packet receive + its ACK
-            # chain are always visible before the "done" banner.
+                if self.delivered >= self.num_packets:
+                    break
+
             if self.delivered >= self.num_packets:
                 self.end_time = self._sim_time
                 self._drain_ack_events()
@@ -264,10 +269,11 @@ class GBNSimulation:
                 self._running = False
                 return
 
-            # Pace: at sim_speed=1.0 → 80ms/event, at 0.2 → 400ms/event
+            # Sleep between sim-time steps — scaled by sim_speed.
+            # At 1.0×: 80 ms/step.  At default 0.2×: 400 ms/step — a
+            # comfortably watchable pace where each event animates clearly.
             _time.sleep(0.08 / self.sim_speed)
 
-        # Natural completion (heap emptied without hitting delivered count)
         if self.delivered >= self.num_packets:
             self.end_time = self._sim_time
             self._emit({"type": "done", "metrics": self.metrics})

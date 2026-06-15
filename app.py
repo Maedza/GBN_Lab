@@ -1,16 +1,3 @@
-"""
-Go-Back-N Protocol Simulator — Single-file GUI.
-
-Three-column layout:
-  Left:   Controls (sliders + buttons)
-  Center: Packet-flow animation canvas + event log
-  Right:  Performance metrics
-
-Minimal dependencies: customtkinter + tkinter canvas (no matplotlib).
-"""
-
-from __future__ import annotations
-
 import time as _time
 from collections import deque
 from typing import Optional
@@ -117,10 +104,10 @@ class GBNLabApp(ctk.CTk):
         # Flying packet animation state
         # pkt_id -> {start_frame, direction, result, failed_at?}
         self._active_flights: dict[int, dict] = {}
-        self._FLIGHT_FRAMES = 6                       # animation frames per flight hop
+        self._FLIGHT_FRAMES = 20                      # animation frames per flight hop
         # where failed packets stop mid-flight
         self._FAIL_POINT = 0.65
-        self._FAIL_DISPLAY_FRAMES = 10                # frames to show X before removing
+        self._FAIL_DISPLAY_FRAMES = 15                # frames to show X before removing
 
         # Scenario context (set by dropdown)
         self._active_scenario: Optional[dict] = None
@@ -1066,7 +1053,11 @@ class GBNLabApp(ctk.CTk):
             else:
                 self._log(
                     "ok", f"ACK #{ack} recv → window slides to base={new_base} @ {event.time:.1f}ms")
-            self._active_flights.pop(-ack - 1, None)
+            # Teleport ACK flight to completion — vanishes on next render frame
+            ack_fid = -ack - 1
+            if ack_fid in self._active_flights:
+                self._active_flights[ack_fid]["start_frame"] = \
+                    self._anim_frame - self._FLIGHT_FRAMES
         elif event.type == EventType.ACK_CORRUPTED:
             self._log("err", f"ACK #{ack} CORRUPTED  @ {event.time:.1f}ms")
             ack_id = -ack - 1
@@ -1095,7 +1086,6 @@ class GBNLabApp(ctk.CTk):
             "direction": direction,
             "result": result,
         }
-
     def _on_done(self, metrics: dict) -> None:
         self._completed = True
         self._stop_polling()
@@ -1161,10 +1151,7 @@ class GBNLabApp(ctk.CTk):
             },
         }
 
-        # Record a few clean frames at the end so replay finishes with
-        # all packets delivered (not stuck mid-flight / blue).  The DONE
-        # event is placed *after* these so _event_to_frame_idx maps it to
-        # the last clean frame.
+        # Record a few clean frames at the end so replay finishes wit        # event is placed *after* these so _event_to_frame_id
         if self._replay_frames:
             base = self._replay_frames[-1]["anim_frame"]
             for i in range(1, 6):
@@ -1519,32 +1506,52 @@ class GBNLabApp(ctk.CTk):
                 else:
                     progress = min(elapsed / flight_frames, 1.0)
                     if progress >= 1.0:
-                        if elapsed > flight_frames + 2:
-                            del self._active_flights[flight_id]
-                            continue
+                        del self._active_flights[flight_id]
+                        continue
 
                 if flight_id < 0:
                     display_pkt = -flight_id - 1
                 else:
                     display_pkt = flight_id
 
-                # Start X: position on sender (relative to window base)
-                sender_col = display_pkt - base
-                if sender_col >= 0 and display_pkt in sender_slot_x:
-                    start_x = sender_slot_x[display_pkt]
-                elif sender_col < 0:
-                    # Off-screen left — pin to left edge
-                    start_x = grid_start_x + dot_r + 4
-                else:
-                    # Off-screen right — pin to right edge
-                    start_x = w - margin_right - dot_r
+                if direction == "ack":
+                    # ACK flies from receiver slot → sender slot (reverse of data)
+                    recv_col = display_pkt - base
+                    if recv_col >= 0 and display_pkt in recv_slot_x:
+                        start_x = recv_slot_x[display_pkt]
+                    elif display_pkt < base:
+                        # Receiver slot scrolled off-screen left — pin to left edge
+                        start_x = grid_start_x + dot_r + 4
+                    else:
+                        # Receiver slot off-screen right — pin to right edge
+                        start_x = w - margin_right - dot_r
 
-                # End X: absolute position on receiver
-                if display_pkt in recv_slot_x:
-                    end_x = recv_slot_x[display_pkt]
+                    if display_pkt in sender_slot_x:
+                        end_x = sender_slot_x[display_pkt]
+                    elif display_pkt < base:
+                        # Sender slot scrolled off-screen left — pin to left edge
+                        end_x = grid_start_x + dot_r + 4
+                    else:
+                        # Sender slot off-screen right — pin to right edge
+                        end_x = w - margin_right - dot_r
                 else:
-                    # Fallback: compute from slot width
-                    end_x = grid_start_x + display_pkt * shared_slot + shared_box / 2
+                    # Start X: position on sender (relative to window base)
+                    sender_col = display_pkt - base
+                    if sender_col >= 0 and display_pkt in sender_slot_x:
+                        start_x = sender_slot_x[display_pkt]
+                    elif sender_col < 0:
+                        # Off-screen left — pin to left edge
+                        start_x = grid_start_x + dot_r + 4
+                    else:
+                        # Off-screen right — pin to right edge
+                        start_x = w - margin_right - dot_r
+
+                    # End X: absolute position on receiver
+                    if display_pkt in recv_slot_x:
+                        end_x = recv_slot_x[display_pkt]
+                    else:
+                        # Fallback: compute from slot width
+                        end_x = grid_start_x + display_pkt * shared_slot + shared_box / 2
 
                 # Interpolate X based on progress
                 t = progress
