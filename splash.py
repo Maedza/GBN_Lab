@@ -108,7 +108,7 @@ class SplashScreen(ctk.CTkToplevel):
 
     def _start_progress(self) -> None:
         self._tick = 0
-        self._total_ticks = 24
+        self._total_ticks = 6
         self._animate_progress()
 
     def _animate_progress(self) -> None:
@@ -131,7 +131,7 @@ class SplashScreen(ctk.CTkToplevel):
         self._status.configure(text=msgs[idx])
 
         if self._tick < self._total_ticks:
-            self.after(120, self._animate_progress)
+            self.after(80, self._animate_progress)
         else:
             self._fade_out()
 

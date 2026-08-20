@@ -3,140 +3,99 @@ Go-Back-N Protocol Simulator — Configuration & Constants.
 """
 
 from __future__ import annotations
-
-# ---- Screen-aware Scaling ----
-# Reference design was built for a 1920×1080 screen at 100 % DPI.
-# All layout constants below are *unscaled* (1×).  At startup the app
-# computes a CANVAS_SCALE multiplier from the actual screen dimensions
-# so the UI looks the same size regardless of resolution or laptop.
+import sys as _sys
 
 _REFERENCE_WIDTH = 1920
 _REFERENCE_HEIGHT = 1080
 CANVAS_SCALE: float = 1.0
 
+_PLATFORM_BOOST = 1.35 if _sys.platform == "win32" else 1.0
+
 
 def init_scale(sw: int, sh: int) -> float:
     """Compute screen-density scale factor. Call once at app startup."""
     global CANVAS_SCALE
-    # Use the average of both axes so the scale tracks the overall screen
-    # area, not the narrowest axis (which punishes short-but-wide displays).
+    
+    if _sys.platform == "darwin":
+        CANVAS_SCALE = 1.0
+        return CANVAS_SCALE
+
     w_ratio = sw / _REFERENCE_WIDTH
     h_ratio = sh / _REFERENCE_HEIGHT
     area_ratio = (w_ratio + h_ratio) / 2.0
-    CANVAS_SCALE = area_ratio
-    # Never shrink below reference — set a modest boost so the UI feels
-    # comfortable on high-DPI screens. Ceiling at 1.6 for huge displays.
-    CANVAS_SCALE = max(1.12, min(CANVAS_SCALE, 1.6))
+    CANVAS_SCALE = area_ratio * _PLATFORM_BOOST
+    CANVAS_SCALE = max(1.12, min(CANVAS_SCALE, 1.8))
     return CANVAS_SCALE
 
 
-# ---- Default Simulation Parameters ----
 DEFAULT_WINDOW_SIZE = 4
-DEFAULT_BER = 0.0001          # Bit error rate (0.0 – 1.0)
-DEFAULT_PACKET_LOSS = 0.05    # Independent packet loss probability
-DEFAULT_NUM_PACKETS = 10      # Total data packets to send
-DEFAULT_TIMEOUT_MS = 0      # 0 = adaptive (3× RTT)
+DEFAULT_BER = 0.0001
+DEFAULT_PACKET_LOSS = 0.05
+DEFAULT_NUM_PACKETS = 10
+DEFAULT_TIMEOUT_MS = 0
 DEFAULT_PACKET_SIZE_BITS = 1000
-DEFAULT_DATA_RATE_KBPS = 100  # Channel data rate in kbps
+DEFAULT_DATA_RATE_KBPS = 100
 DEFAULT_PROPAGATION_DELAY_MS = 10
-DEFAULT_SIM_SPEED = 0.2       # Animation speed (0.1 = slow, 0.5 = readable, 1.0 = fast)
+DEFAULT_SIM_SPEED = 0.2
 
-# ---- Simulation Engine ----
-GUI_UPDATE_INTERVAL_MS = 50   # milliseconds between GUI polls
-MAX_LOG_EVENTS = 80           # visible event log lines
+GUI_UPDATE_INTERVAL_MS = 50
+MAX_LOG_EVENTS = 80
+MAX_REPLAY_FRAMES = 2000
+MAX_LOG_TEXT_LINES = 500
 
-# ---- Animation ----
-ANIMATION_INTERVAL_MS = 80    # canvas redraw interval
+ANIMATION_INTERVAL_MS = 80
 MONO_FONT = ("Consolas", "SF Mono", "Courier New", "TkFixedFont")
-# cross-platform monospace — picks first available on each OS
-PACKET_BOX_SIZE = 34          # size of each packet square on canvas
-PACKET_SPACING = 6            # gap between packet squares
+PACKET_BOX_RATIO = 0.048
+PACKET_SPACING_RATIO = 0.008
 
-# ---- Color Scheme (dark theme) ----
-COLOR_BG = "#0f172a"          # deepest background
-COLOR_BG_PANEL = "#1e293b"   # panel / card background
+CANVAS_SENDER_Y_RATIO = 0.12
+CANVAS_RECV_Y_RATIO = 0.68
+CANVAS_MARGIN_RATIO = 0.03
+CANVAS_LABEL_X_RATIO = 0.03
+CANVAS_GRID_OFFSET_RATIO = 0.10
+CANVAS_FOOTER_RATIO = 0.04
+CANVAS_LEGEND_W_RATIO = 0.12
+CANVAS_WEIGHT = 3
+EVENT_LOG_WEIGHT = 2
+EVENT_LOG_HEIGHT = 10
+
+COLOR_BG = "#0f172a"
+COLOR_BG_PANEL = "#1e293b"
 COLOR_BG_HIGHLIGHT = "#334155"
-COLOR_ACCENT = "#38bdf8"     # sky blue — primary accent
-COLOR_BRAND = "#6366f1"      # indigo — secondary accent
-COLOR_SUCCESS = "#4ade80"    # green
-COLOR_ERROR = "#f87171"      # red
-COLOR_WARNING = "#fbbf24"    # amber
-COLOR_TEXT = "#f1f5f9"       # primary text
-COLOR_TEXT_MUTED = "#94a3b8" # secondary text
-COLOR_BORDER = "#334155"     # divider / border
+COLOR_ACCENT = "#38bdf8"
+COLOR_BRAND = "#6366f1"
+COLOR_SUCCESS = "#4ade80"
+COLOR_ERROR = "#f87171"
+COLOR_WARNING = "#fbbf24"
+COLOR_TEXT = "#f1f5f9"
+COLOR_TEXT_MUTED = "#94a3b8"
+COLOR_BORDER = "#334155"
 
-# Packet state colours for the animation canvas
-COLOR_UNSENT = "#334155"     # not yet sent
-COLOR_SENT = COLOR_ACCENT    # sent, awaiting ACK
-COLOR_ACKED = COLOR_SUCCESS  # acknowledged / delivered
-COLOR_TIMEOUT = COLOR_ERROR  # timed out / corrupted
+COLOR_UNSENT = "#334155"
+COLOR_SENT = COLOR_SUCCESS
+COLOR_ACKED = COLOR_ACCENT
+COLOR_TIMEOUT = COLOR_ERROR
 
-# ---- Status ----
 STATUS_IDLE = "Idle"
 STATUS_RUNNING = "Running"
 STATUS_COMPLETE = "Complete"
 
-# ---- Scenario Presets ----
 SCENARIO_PRESETS = {
     "Low Errors": {
         "window_size": 4, "ber": 0.0001, "packet_loss": 0.01,
         "timeout_ms": 0, "num_packets": 10,
-        "description": (
-            "Clean channel — bits rarely flip and packets seldom vanish. "
-            "This is GBN at its happiest: the sender fills the window, "
-            "ACKs stream back promptly, and all 10 packets arrive in order. "
-            "The timer rarely fires here."
-        ),
-        "what_to_observe": (
-            "Watch the pipeline run uninterrupted. "
-            "Notice how cumulative ACKs slide the window forward "
-            "without waiting for individual per-packet ACKs."
-        ),
     },
     "Moderate Noise": {
         "window_size": 4, "ber": 0.001, "packet_loss": 0.03,
         "timeout_ms": 0, "num_packets": 10,
-        "description": (
-            "A realistic noisy channel. Roughly 1 in 1,000 bits gets "
-            "corrupted, and a few packets (and their ACKs) drop entirely. "
-            "The sender periodically hits timeouts and resends the window."
-        ),
-        "what_to_observe": (
-            "Count how many retransmissions appear in the event log. "
-            "Notice that a single lost packet forces the entire window "
-            "to be resent — not just the missing one."
-        ),
     },
     "High BER Nightmare": {
         "window_size": 4, "ber": 0.008, "packet_loss": 0.05,
         "timeout_ms": 0, "num_packets": 10,
-        "description": (
-            "Brutal bit-error rate. Nearly 1 in 125 bits is flipped — "
-            "corruptions dominate the channel. Almost every round trip "
-            "suffers a damaged packet or garbled ACK."
-        ),
-        "what_to_observe": (
-            "Efficiency plummets here. The event log fills with "
-            "CORRUPTED and TIMEOUT entries. Compare throughput with "
-            "Low Errors — the drop is dramatic. Also, watch the "
-            "animation canvas for red (timed-out) packet states."
-        ),
     },
     "Packet Loss Hell": {
         "window_size": 4, "ber": 0.0005, "packet_loss": 0.20,
         "timeout_ms": 0, "num_packets": 10,
-        "description": (
-            "High packet loss — 1 in 5 packets simply disappears. "
-            "Bit errors are rare; the problem is the channel silently "
-            "swallowing packets (and their ACKs). GBN's window-based "
-            "retransmission means every loss triggers a burst of re-sends."
-        ),
-        "what_to_observe": (
-            "Look for 'LOST' and 'DISCARD' log entries. When a packet "
-            "vanishes, the sender sends subsequent ones that the receiver "
-            "throws away (out-of-order). After timeout, all in-flight "
-            "packets get retransmitted at once."
-        ),
     },
 }
 

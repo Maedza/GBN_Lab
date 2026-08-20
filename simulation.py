@@ -34,8 +34,6 @@ class SimEvent:
     meta: dict = field(default_factory=dict, compare=False)
 
 
-# Channel Model
-
 class Channel:
     """Simulates a noisy communication channel with BER and packet loss."""
 
@@ -45,7 +43,6 @@ class Channel:
         self.packet_loss = max(0.0, min(1.0, packet_loss))
         self.propagation_delay_ms = propagation_delay_ms
         self.data_rate_kbps = data_rate_kbps
-        # Statistics
         self.packets_through = 0
         self.corrupted = 0
         self.lost = 0
@@ -58,13 +55,11 @@ class Channel:
         """
         self.packets_through += 1
 
-        # Packet loss check
         if random.random() < self.packet_loss:
             self.lost += 1
             tx_time = size_bits / max(self.data_rate_kbps, 0.001)
             return False, True, tx_time
 
-        # Bit error check: P(at least one error) = 1 - (1 - BER)^n
         corrupted = False
         if self.ber > 0:
             success_prob = (1.0 - self.ber) ** size_bits
@@ -84,23 +79,18 @@ class Channel:
         self.lost = 0
 
 
-# Go-Back-N Protocol State
-
 class GBNState:
     """Snapshot of the Go-Back-N sender and receiver at a given moment."""
     def __init__(self):
-        # Sender
         self.base: int = 0
         self.next_seq: int = 0
         self.sent: set = set()
         self.timed_out: set = set()
 
-        # Receiver
         self.expected: int = 0
         self.received: set = set()
         self.corrupted: set = set()
 
-        # Resend visual — which window range is currently being retransmitted
         self.retransmitting_window: tuple | None = None
         self.retransmit_frame: int = 0
 
@@ -117,20 +107,18 @@ class GBNSimulation:
                  timeout_ms: float = 300.0, packet_size_bits: int = 1000,
                  data_rate_kbps: float = 100.0, propagation_delay_ms: float = 10.0,
                  sim_speed: float = 1.0):
-        # Parameters
         self.window_size = window_size
         self.num_packets = num_packets
         self.packet_size_bits = packet_size_bits
         self.timeout_ms = timeout_ms
         self.data_rate_kbps = data_rate_kbps
         self.propagation_delay_ms = propagation_delay_ms
-        self.sim_speed = max(0.1, min(50.0, sim_speed))  # throttle simulation speed
+        self.sim_speed = max(0.1, min(50.0, sim_speed))
 
         self.channel = Channel(ber=ber, packet_loss=packet_loss,
                                propagation_delay_ms=propagation_delay_ms,
                                data_rate_kbps=data_rate_kbps)
 
-        # Protocol state
         self.state = GBNState()
         self.delivered = 0
         self.total_sent = 0
@@ -151,6 +139,8 @@ class GBNSimulation:
         self._event_count: int = 0
 
         self._timeout_pending: bool = False
+
+        self._ack_slot: float = 0.0
 
     @property
     def _timer_ms(self) -> float:
@@ -201,17 +191,14 @@ class GBNSimulation:
         self._running = True
         self._sim_time = 0.0
 
-        # Initialise the global send-slot counter so all send events are
-        # strictly serialised (1 slot = 1 tx_time on the wire).
         self._next_send_slot = 1.0
+        self._ack_slot = 1.0
 
-        # Seed: send up to N initial packets
         initial_count = min(self.window_size, self.num_packets)
         for i in range(initial_count):
             heapq.heappush(self._event_heap, self._make_send_event(i))
             self.state.sent.add(i)
-        # CRITICAL: next_seq must reflect ALL scheduled packets immediately,
-        # otherwise early ACKs will re-send packets still in the future heap
+
         self.state.next_seq = initial_count
 
         self._state_to_queue()
@@ -269,9 +256,6 @@ class GBNSimulation:
                 self._running = False
                 return
 
-            # Sleep between sim-time steps — scaled by sim_speed.
-            # At 1.0×: 80 ms/step.  At default 0.2×: 400 ms/step — a
-            # comfortably watchable pace where each event animates clearly.
             _time.sleep(0.08 / self.sim_speed)
 
         if self.delivered >= self.num_packets:
@@ -302,9 +286,9 @@ class GBNSimulation:
                 if evt.time < self._sim_time:
                     evt.time = self._sim_time + 0.001
                 heapq.heappush(self._event_heap, evt)
-            # Emit this ACK so the GUI displays it before the "done" banner
+
             self._emit({"type": "event", "event": event, "state_snapshot": self._make_snapshot()})
-            # Let the GUI render this ACK before the next event
+
             _time.sleep(0.08 / self.sim_speed)
 
     def _step(self, event: SimEvent) -> list[SimEvent]:
@@ -321,7 +305,7 @@ class GBNSimulation:
         elif et == EventType.ACK_RECEIVED:
             return self._on_ack_received(event)
         elif et in (EventType.ACK_CORRUPTED, EventType.ACK_LOST):
-            return []  # sender will timeout
+            return []
         elif et == EventType.TIMEOUT:
             return self._on_timeout(event)
         return []
@@ -335,7 +319,6 @@ class GBNSimulation:
             self.start_time = event.time
         self.total_sent += 1
 
-        # Update flying state
         self.state.sent.add(pid)
 
         corrupted, lost, tx_time = self.channel.transmit(self.packet_size_bits)
@@ -352,13 +335,11 @@ class GBNSimulation:
         else:
             out.append(SimEvent(arrival, type=EventType.PACKET_RECEIVED, packet_id=pid))
 
-        # GBN: only ONE timer tracks the oldest unACKed packet (base)
         if not self._timeout_pending and pid == self.state.base:
             self._timeout_pending = True
             out.append(SimEvent(event.time + self._timer_ms,
                                 type=EventType.TIMEOUT, packet_id=pid))
 
-        # Calculate next_seq if needed
         self.state.next_seq = max(self.state.next_seq, pid + 1)
 
         return out
@@ -376,20 +357,20 @@ class GBNSimulation:
             s.expected += 1
             s.corrupted.discard(pid)
 
-
-
-            # Tag event so GUI knows this was accepted
             event.meta["accepted"] = True
 
-            # Send cumulative ACK
             ack = s.expected - 1
-            ack_time = event.time + self.channel.propagation_delay_ms
+            floor = event.time + 0.5
+            if self._ack_slot < floor:
+                self._ack_slot = floor
+            ack_send_time = self._ack_slot
+            self._ack_slot += max(self._tx_time_ms * 0.1, 0.5)
+            ack_time = ack_send_time + self.channel.propagation_delay_ms
             out.append(SimEvent(ack_time, type=EventType.ACK_SENT,
                                 ack_id=ack, packet_id=pid,
                                 meta={"from_accept": True}))
             self.acks_sent += 1
         else:
-            # Out of order — silently discard. No duplicate ACK.
             event.meta["accepted"] = False
             event.meta["expected"] = s.expected
 
@@ -405,8 +386,8 @@ class GBNSimulation:
     def _on_ack_sent(self, event: SimEvent) -> list[SimEvent]:
         """ACK sent from receiver — transmit back through channel."""
         out = []
-        corrupted, lost, _ = self.channel.transmit(40)  # ACKs are ~40 bits
-        arrival = event.time + self.channel.propagation_delay_ms
+        corrupted, lost, tx_time = self.channel.transmit(40)
+        arrival = event.time + tx_time + self.channel.propagation_delay_ms
 
         if lost:
             self.errors += 1
@@ -425,79 +406,53 @@ class GBNSimulation:
         old_base = self.state.base
 
         if ack >= self.state.base:
-            # Cumulative ACK: all packets up to ack are confirmed
             self.state.base = ack + 1
             self.state.next_seq = max(self.state.next_seq, self.state.base)
 
-            # Clear timeout tracking — restart timer for new base if needed
             self._timeout_pending = False
             if self.state.base > old_base:
-                # Remove stale timeout events from heap (window has advanced)
+
                 self._event_heap = [e for e in self._event_heap
                                     if e.type != EventType.TIMEOUT]
                 heapq.heapify(self._event_heap)
 
-            # Clear confirmed from sent set
+
             self.state.sent = {p for p in self.state.sent if p > ack}
             self.state.timed_out = {t for t in self.state.timed_out if t > ack}
 
-            # Clear retransmit highlight once the window has slid past it
             rw = self.state.retransmitting_window
             if rw and self.state.base > rw[1]:
                 self.state.retransmitting_window = None
 
-            # Send new packets within window (slot counter auto-staggers)
             while self.state.next_seq < self.state.base + self.window_size \
                   and self.state.next_seq < self.num_packets:
                 out.append(self._make_send_event(self.state.next_seq))
                 self.state.sent.add(self.state.next_seq)
                 self.state.next_seq += 1
 
-            # GBN: restart timer for new base if unACKed packets remain
             if self.state.base < self.state.next_seq and not self._timeout_pending:
                 self._timeout_pending = True
                 out.append(SimEvent(self._sim_time + self._timer_ms,
                                     type=EventType.TIMEOUT,
                                     packet_id=self.state.base))
         else:
-            # Duplicate ACK — ignored by Go-Back-N; mark for GUI display
             event.meta["is_duplicate"] = True
 
         return out
 
     def _on_timeout(self, event: SimEvent) -> list[SimEvent]:
-        """Timeout — Go-Back-N retransmits the ENTIRE window from base.
-
-        Real GBN uses a single timer; after firing, remove all stale
-        timeout events from the heap so only one retransmission occurs.
-
-        Also purges all stale packet-receive and ACK events from the
-        pre-timeout transmission round.  Without this, old
-        PACKET_RECEIVED / CORRUPTED / LOST events still in the heap
-        spur the receiver into sending duplicate cumulative ACKs,
-        creating an "ACK storm" that makes the simulation appear stuck
-        and can even advance the delivered count on ghost packets.
-        """
         out = []
 
-        # Guard: ignore a stale timeout if base has already advanced past this packet
         if event.packet_id < self.state.base:
             return out
 
         self.timeouts += 1
-        self._timeout_pending = False  # timer fired — will re-schedule on retransmit
+        self._timeout_pending = False
         self.state.timed_out.add(event.packet_id)
 
         win_start = self.state.base
         win_end = min(self.state.next_seq - 1, self.num_packets - 1)
 
-        # Purge stale events tied to the window we are about to re-send
-        # 1. Old TIMEOUT events           (one-timer GBN rule)
-        # 2. Old PACKET_RECEIVED / CORRUPTED / LOST events for window packets
-        #    (these would trigger spurious duplicate ACKs at the receiver)
-        # 3. Old ACK_SENT / ACK_RECEIVED events whose ack_id is below
-        #    receiver.expected — generated by out-of-order discards before
-        #    the timeout; harmless duplicates, but they clutter the event log
         stale_packet_types = {
             EventType.PACKET_RECEIVED,
             EventType.PACKET_CORRUPTED,
@@ -518,19 +473,15 @@ class GBNSimulation:
         self._event_heap = keep
         heapq.heapify(self._event_heap)
 
-        # Attach window range to the event so the GUI can display it
         event.meta = {
             "window_start": win_start,
             "window_end": win_end,
             "window_size": self.window_size,
         }
 
-        # Mark the visual retransmission window for canvas highlighting
         self.state.retransmitting_window = (win_start, win_end)
         self.state.retransmit_frame += 1
 
-        # Retransmit all unACKed from base to next_seq-1
-        # 5 ms penalty for timeout + slot-counter for serialisation
         self._next_send_slot = max(self._next_send_slot, self._sim_time + 5.0)
         for pid in range(win_start, win_end + 1):
             if pid < self.num_packets:
@@ -547,14 +498,7 @@ class GBNSimulation:
         return self.packet_size_bits / self.data_rate_kbps
 
     def _make_send_event(self, pkt_id: int) -> SimEvent:
-        """Create a PACKET_SENT event with a globally-serialised send time.
-
-        Every send event consumes one tx_time slot.  The slot counter ensures
-        packets are always transmitted in the order they are scheduled, no
-        matter which code path creates them (initial burst, window slide,
-        or timeout retransmit).
-        """
-        # Never schedule before "right now" + 1 ms processing floor
+        
         floor = self._sim_time + 1.0
         if self._next_send_slot < floor:
             self._next_send_slot = floor
@@ -591,7 +535,6 @@ class GBNSimulation:
         try:
             self._msg_queue.put(msg, timeout=0.5)
         except queue.Full:
-            pass  # GUI can't keep up, drop this message
-
+            pass  
     def _state_to_queue(self) -> None:
         self._emit({"type": "tick", "state_snapshot": self._make_snapshot()})
