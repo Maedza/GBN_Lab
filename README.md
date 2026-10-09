@@ -130,6 +130,6 @@ python app.py
 Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for the full guide.
 
 1. Fork the repository and create a feature branch.
-2. Keep changes focused and well-tested.
+2. Run the simulation across a few scenarios to check your change before opening a PR.
 3. Update the README and CHANGELOG where relevant.
 4. Open a pull request with a clear description.
