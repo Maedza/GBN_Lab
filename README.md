@@ -9,8 +9,21 @@ GBN Lab turns protocol internals into a live animation: watch packets fly across
 
 ---
 
+## Screenshots
+
+**Mid-flight: window of 4 in transit, corruption and loss in play**
+
+![GBN Lab running simulation](screenshots/simulation-running.png)
+
+**Completed run: live efficiency, retransmission, and timing metrics**
+
+![GBN Lab completed simulation](screenshots/simulation-complete.png)
+
+---
+
 ## Table of Contents
 
+- [Screenshots](#screenshots)
 - [Features](#features)
 - [How It Works](#how-it-works)
 - [Getting Started](#getting-started)
